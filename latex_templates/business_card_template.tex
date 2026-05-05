@@ -1,0 +1,28 @@
+\documentclass[10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=0.5cm, paperwidth=9cm, paperheight=5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{fontawesome}
+\usepackage{tabularx}
+
+\begin{document}
+\pagenumbering{gobble}
+\begin{center}
+   \Large \textbf{ {{prefix}} {{firstName}} {{lastName}} {{suffix}} }\\
+    \vspace{2mm}
+
+    \normalsize {{title}}
+    \vspace{2mm}
+
+    \begin{tabular}{c}
+        \faEnvelope ~ {{email}} \\
+        \faPhone ~ {{phone}} \\
+        \faGlobe ~ {{website}}
+    \end{tabular}\\
+    \vspace{2mm}
+
+    \footnotesize {{company}}\\
+    \vspace{1mm}
+    \small \texttt{Powered by Swiish}
+\end{center}
+\end{document}

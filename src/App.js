@@ -20,7 +20,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 
 const API_ENDPOINT = '/api';
 const APP_VERSION = require('../package.json').version; // Automatically read from package.json
-const GITHUB_URL = 'https://github.com/MrCrin/swiish';
+const GITHUB_URL = 'https://github.com/whatever4711/swiish';
 
 // Try to read branch info from active-branch.json (generated at build time)
 let GIT_BRANCH = null;
@@ -90,10 +90,15 @@ const buildQrPayload = (shortCode, data) => {
   const { personal = {}, contact = {} } = data || {};
 
   const safe = (v, maxLen = 120) => sanitizeText(v || '').substring(0, maxLen);
-  
+  const prefix = safe(personal.prefix || '', 20);
+  const suffix = safe(personal.suffix || '', 20);
   const firstName = safe(personal.firstName || '', 40);
   const lastName = safe(personal.lastName || '', 40);
-  const fullName = `${firstName} ${lastName}`.trim();
+  let fullName = '';
+  if (prefix) fullName += prefix + ' ';
+  fullName += firstName + ' ' + lastName;
+  if (suffix) fullName += ' ' + suffix;
+  fullName = fullName.trim();
   const company = safe(personal.company || '', 80);
   const email = safe(contact.email || '', 120);
   const phone = safe(contact.phone || '', 50);
@@ -192,6 +197,8 @@ const getDefaultTemplate = (settings) => ({
   personal: {
     firstName: "New",
     lastName: "User",
+    prefix: "",
+    suffix: "",
     title: "Role Title",
     company: settings?.default_organisation || "My Organisation",
     bio: "Welcome to the team.",
@@ -2492,7 +2499,47 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
     : null;
 
   const dropCallLink = ownerPhone ? `tel:${ownerPhone}` : null;
-  
+
+  const downloadPdf = async () => {
+    try {
+      // Determine short code from data or from URL
+      let shortCode = data._shortCode;
+      if (!shortCode) {
+        const pathParts = window.location.pathname.substring(1).split('/').filter(p => p);
+        const isShortCodeRoute = pathParts.length === 1 && /^[a-zA-Z0-9]{7}$/.test(pathParts[0]);
+        shortCode = isShortCodeRoute ? pathParts[0] : null;
+      }
+      if (!shortCode) {
+        console.error('[PDF] No short code found');
+        if (showAlert) showAlert('Unable to generate PDF: missing short code', 'error');
+        return;
+      }
+
+      const response = await fetch(`/api/cards/${shortCode}/export-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Server responded with ${response.status}: ${errText}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `card_${shortCode}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[PDF] Download failed:', err);
+      if (showAlert) showAlert('Failed to generate PDF. Please try again.', 'error');
+    }
+  };
+
   // Helper functions for obfuscation
   const obfuscateContact = (value) => {
     if (!value) return '';
@@ -2519,11 +2566,10 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
   
   // UPDATED: Set Title
   useEffect(() => {
-    const firstName = sanitizeText(personal.firstName || '');
-    const lastName = sanitizeText(personal.lastName || '');
-    if (firstName || lastName) {
-      document.title = `${firstName} ${lastName}`;
-    }
+    const prefix = personal.prefix ? personal.prefix + ' ' : '';
+    const suffix = personal.suffix ? ' ' + personal.suffix : '';
+    const fullName = sanitizeText(`${prefix}${personal.firstName || ''} ${personal.lastName || ''}${suffix}`).trim();
+    if (fullName) document.title = fullName;
   }, [personal]);
 
   // Dynamic per-card manifest link (per-card app name & start_url)
@@ -2712,6 +2758,8 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
   const generateVCard = () => {
     const firstName = sanitizeText(personal.firstName || '');
     const lastName = sanitizeText(personal.lastName || '');
+    const prefix = sanitizeText(personal.prefix || '');
+    const suffix = sanitizeText(personal.suffix || '');
     const company = sanitizeText(personal.company || '');
     const title = sanitizeText(personal.title || '');
     const phone = sanitizeText(contact.phone || '');
@@ -2722,7 +2770,7 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
     const vcard = `BEGIN:VCARD
 VERSION:3.0
 FN:${firstName} ${lastName}
-N:${lastName};${firstName};;;
+N:${lastName};${firstName};;${prefix};${suffix}
 ORG:${company}
 TITLE:${title}
 TEL;TYPE=CELL:${phone}
@@ -2954,7 +3002,11 @@ END:VCARD`;
         </div>
 
         <div className="space-y-1 mb-8">
-          <h1 className="text-3xl font-bold text-text-primary dark:text-text-primary-dark tracking-tight">{sanitizeText(`${personal.firstName || ''} ${personal.lastName || ''}`).trim() || 'Untitled'}</h1>
+          <h1 className="text-3xl font-bold text-text-primary dark:text-text-primary-dark tracking-tight">
+            {sanitizeText(
+                `${personal.prefix ? personal.prefix + ' ' : ''}${personal.firstName || ''} ${personal.lastName || ''}${personal.suffix ? ' ' + personal.suffix : ''}`
+            ).trim() || 'Untitled'}
+          </h1>
           {(() => {
             const color = settings?.theme_colors?.find(c => c.name === theme.color);
             const title = sanitizeText(personal.title || '');
@@ -3071,6 +3123,17 @@ END:VCARD`;
             );
           })()}
         </div>
+
+        {/* Download PDF Button */}
+        <div className="mb-8">
+        <button
+            onClick={downloadPdf}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold bg-surface dark:bg-surface-dark text-text-primary dark:text-text-primary-dark hover:bg-surface dark:hover:bg-surface-dark transition-colors border border-border dark:border-border-dark"
+        >
+          <Download className="w-5 h-5" />
+          Download Card as PDF
+        </button>
+      </div>
 
         {/* Send your details CTA */}
         <div className="mb-8">
@@ -3352,6 +3415,9 @@ function EditorView({ data, setData, onBack, onSave, slug, settings, csrfToken, 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input label="First Name" value={data.personal.firstName} onChange={v => handleInputChange('personal', 'firstName', v)} />
                   <Input label="Last Name" value={data.personal.lastName} onChange={v => handleInputChange('personal', 'lastName', v)} />
+                  {/* New prefix and suffix */}
+                  <Input label="Prefix (e.g., Dr.)" value={data.personal.prefix} onChange={v => handleInputChange('personal', 'prefix', v)} />
+                  <Input label="Suffix (e.g., PhD)" value={data.personal.suffix} onChange={v => handleInputChange('personal', 'suffix', v)} />
                   <Input label="Job Title" value={data.personal.title} onChange={v => handleInputChange('personal', 'title', v)} />
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-text-primary dark:text-text-secondary-dark">Organisation</label>

@@ -1343,6 +1343,8 @@ function ensureUniqueShortCode(db, callback) {
 const cardDataValidation = [
   body('personal.firstName').optional().trim().isLength({ max: 100 }).withMessage('First name too long'),
   body('personal.lastName').optional().trim().isLength({ max: 100 }).withMessage('Last name too long'),
+  body('personal.prefix').optional().isString().isLength({ max: 50 }),
+  body('personal.suffix').optional().isString().isLength({ max: 50 }),
   body('personal.title').optional().trim().isLength({ max: 200 }).withMessage('Title too long'),
   body('personal.company').optional().trim().isLength({ max: 200 }).withMessage('Company name too long'),
   body('personal.bio').optional().trim().isLength({ max: 1000 }).withMessage('Bio too long'),
@@ -1724,6 +1726,83 @@ app.get('/api/cards/short/:shortCode', cardReadLimiter, (req, res, next) => {
   });
 });
 
+app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
+  const shortCode = (req.params.shortCode || '').trim();
+  const format = req.query.format || 'pdf'; // 'pdf' or 'tex'
+  const SHORT_CODE_LENGTH = 7; // from Swiish constant
+
+  // 1. Validate short code (exactly 7 alphanumeric chars)
+  if (!shortCode || shortCode.length !== SHORT_CODE_LENGTH) {
+    return res.status(400).json({ error: `Short code must be exactly ${SHORT_CODE_LENGTH} characters` });
+  }
+  if (!new RegExp(`^[a-zA-Z0-9]{${SHORT_CODE_LENGTH}}$`).test(shortCode)) {
+    return res.status(400).json({ error: 'Short code must contain only letters and numbers' });
+  }
+
+  try {
+    // 2. Query the database using the same logic as the GET /api/cards/short/:shortCode endpoint
+    const row = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT c.data, c.short_code, o.slug as org_slug
+        FROM cards c
+        JOIN users u ON c.user_id = u.id
+        LEFT JOIN organisations o ON u.organisation_id = o.id
+        WHERE c.short_code = ?
+      `, [shortCode], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!row) {
+      return res.status(404).json({ error: 'Card not found' });
+    }
+
+    // 3. Parse the stored JSON data
+    let cardData;
+    try {
+      cardData = JSON.parse(row.data);
+    } catch (e) {
+      console.error('[PDF] Error parsing card data:', e);
+      return res.status(500).json({ error: 'Invalid card data format' });
+    }
+    console.log('[DEBUG] Raw cardData from DB:', JSON.stringify(cardData, null, 2));
+    console.log('[DEBUG] Available top-level keys:', Object.keys(cardData));
+    // 4. Extract fields needed for the PDF (fallback to empty strings)
+    const pdfData = {
+      firstName: cardData.personal?.firstName || '',
+      lastName: cardData.personal?.lastName || '',
+      prefix: cardData.personal?.prefix || '',
+      suffix: cardData.personal?.suffix || '',
+      title: cardData.personal?.title || '',
+      company: cardData.personal?.company || '',
+      email: cardData.contact?.email || '',
+      phone: cardData.contact?.phone || '',
+      website: cardData.contact?.website || ''
+    };
+
+    // Fill the template
+    const filledTex = fillLaTeXTemplate(pdfData);
+
+    // If user wants only the .tex source
+    if (format === 'tex') {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="card_${shortCode}.tex"`);
+      return res.send(filledTex);
+    }
+
+    // Default: compile PDF
+    const pdfBuffer = await compileLaTeXToPDF(filledTex);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="card_${shortCode}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (err) {
+    console.error('[SERVER] PDF generation error:', err);
+    res.status(500).json({ error: 'Failed to generate PDF', details: err.message });
+  }
+});
+
 // GET Card Preview Image (Social Media Meta Tag)
 // MUST come BEFORE org-scoped route so /preview.png matches before being interpreted as cardSlug
 // Supports both slug and short_code identifiers
@@ -1974,6 +2053,8 @@ app.post('/api/cards/:slug', requireAuth, apiLimiter, csrfProtection, [
     personal: {
       firstName: (req.body.personal?.firstName || '').trim().substring(0, 100),
       lastName: (req.body.personal?.lastName || '').trim().substring(0, 100),
+      prefix: (req.body.personal?.prefix || '').trim().substring(0, 50),   // NEW
+      suffix: (req.body.personal?.suffix || '').trim().substring(0, 50),   // NEW
       title: (req.body.personal?.title || '').trim().substring(0, 200),
       company: (req.body.personal?.company || '').trim().substring(0, 200),
       bio: (req.body.personal?.bio || '').trim().substring(0, 1000),
@@ -4569,3 +4650,77 @@ async function runMigrations() {
     process.exit(1);
   }
 })();
+
+const latex = require('node-latex');
+const { Readable } = require('stream');
+//const fs = require('fs');
+//const path = require('path');
+
+// Helper: read template, replace placeholders, clean empty lines
+function fillLaTeXTemplate(cardData) {
+  const templatePath = path.join(__dirname, 'latex_templates', 'business_card_template.tex');
+  let texContent = fs.readFileSync(templatePath, 'utf8');
+
+  // 1. Replace placeholders with escaped values
+  const replacements = {
+    '{{firstName}}': escapeLatex(cardData.firstName || ''),
+    '{{lastName}}': escapeLatex(cardData.lastName || ''),
+    '{{prefix}}': escapeLatex(cardData.prefix || ''),
+    '{{suffix}}': escapeLatex(cardData.suffix || ''),
+    '{{title}}': escapeLatex(cardData.title || ''),
+    '{{email}}': escapeLatex(cardData.email || ''),
+    '{{phone}}': escapeLatex(cardData.phone || ''),
+    '{{website}}': escapeLatex(cardData.website || ''),
+    '{{company}}': escapeLatex(cardData.company || '')
+  };
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    texContent = texContent.split(placeholder).join(value);
+  }
+
+  // 2. Split into lines and filter out problematic lines
+  const lines = texContent.split(/\r?\n/);
+  const filteredLines = [];
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    // Skip lines that are:
+    // - completely empty
+    // - only "\\" (with possible spaces)
+    // - only "\vspace{...}"
+    if (trimmed === '' || trimmed === '\\\\' || /^\\vspace\{.*\}$/.test(trimmed)) {
+      continue;
+    }
+    filteredLines.push(line);
+  }
+
+  let cleaned = filteredLines.join('\n');
+
+  // 3. Remove empty tabular environments (no rows left)
+  //    This regex removes \begin{tabular}{c}...\end{tabular} if there is nothing
+  //    except whitespace and & and \\ (i.e., no actual content)
+  cleaned = cleaned.replace(/\\begin\{tabular\}\{c\}\s*\\end\{tabular\}/g, '');
+
+  return cleaned;
+}
+
+
+
+// Helper: compile filled LaTeX to PDF
+async function compileLaTeXToPDF(texContent) {
+  const inputStream = Readable.from([texContent]);
+  const pdfStream = latex(inputStream);
+
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    pdfStream.on('data', chunk => chunks.push(chunk));
+    pdfStream.on('end', () => resolve(Buffer.concat(chunks)));
+    pdfStream.on('error', reject);
+  });
+}
+// Helper to escape LaTeX special characters
+function escapeLatex(str) {
+  if (!str) return '';
+  return str.replace(/[\\&%$#_{}~^]/g, '\\$&')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, '');
+}
