@@ -1748,6 +1748,8 @@ app.get('/api/cards/short/:shortCode', cardReadLimiter, (req, res, next) => {
   });
 });
 
+const fsPromises = require('fs').promises;
+
 app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
   const shortCode = (req.params.shortCode || '').trim();
   const format = req.query.format || 'pdf'; // 'pdf' or 'tex'
@@ -1793,6 +1795,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     // 4. Extract fields needed for the PDF (fallback to empty strings)
     const pdfData = {
       firstName: cardData.personal?.firstName || '',
+      middleName: cardData.personal?.middleName || '',
       lastName: cardData.personal?.lastName || '',
       prefix: cardData.personal?.prefix || '',
       suffix: cardData.personal?.suffix || '',
@@ -1800,21 +1803,72 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       company: cardData.personal?.company || '',
       email: cardData.contact?.email || '',
       phone: cardData.contact?.phone || '',
-      website: cardData.contact?.website || ''
+      website: cardData.contact?.website || '',
+      bio: cardData.personal?.bio || ''
     };
 
-    // Fill the template
-    const filledTex = fillLaTeXTemplate(pdfData);
 
-    // If user wants only the .tex source
+    // If format=tex, return the filled LaTeX source (without QR image injection)
     if (format === 'tex') {
+      const filledTex = fillLaTeXTemplate(pdfData);
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Content-Disposition', `attachment; filename="card_${shortCode}.tex"`);
       return res.send(filledTex);
     }
 
-    // Default: compile PDF
-    const pdfBuffer = await compileLaTeXToPDF(filledTex);
+    // ---- PDF generation with QR code ----
+    // 1. Build vCard string
+    const vcardString = buildVCardString(pdfData);
+
+    // 2. Generate unique QR image filename and save to temp directory
+    const tempDir = os.tmpdir();
+    const qrFileName = `qr_${shortCode}_${Date.now()}.png`;
+    const qrFilePath = path.join(tempDir, qrFileName);
+    await QRCode.toFile(qrFilePath, vcardString, {
+      width: 200,
+      margin: 1,
+      errorCorrectionLevel: 'M'
+    });
+
+    // 3. Copy QR image to the project root (where pdflatex runs)
+    const projectQrPath = path.join(process.cwd(), qrFileName);
+    await fsPromises.copyFile(qrFilePath, projectQrPath);
+    // After copying QR image to projectQrPath, verify it exists
+    try {
+      await fsPromises.access(projectQrPath);
+      console.log(`[PDF] QR image exists at ${projectQrPath}`);
+    } catch (err) {
+      console.error('[PDF] QR image missing after copy:', err);
+      throw new Error('QR image file not found');
+    }
+
+    // 4. Get the filled LaTeX template (without QR yet)
+    let texContent = fillLaTeXTemplate(pdfData);
+
+    // 5. Inject the QR code command into the LaTeX source
+    //    We assume the template has a placeholder {{qrImage}} that we replace with the actual \includegraphics
+    //    Or we can insert the command at a specific location, e.g., after \begin{document}
+
+    texContent = texContent.replace(/{{qrImage}}/g, `${qrFileName}`);
+
+    // 6. Compile PDF
+    const inputStream = Readable.from([texContent]);
+    const pdfStream = latex(inputStream, {
+      cwd: process.cwd(),          // run pdflatex from project root
+      inputs: [process.cwd(), tempDir]  // search for files in these directories
+    });
+    const pdfBuffer = await new Promise((resolve, reject) => {
+      const chunks = [];
+      pdfStream.on('data', chunk => chunks.push(chunk));
+      pdfStream.on('end', () => resolve(Buffer.concat(chunks)));
+      pdfStream.on('error', reject);
+    });
+
+    // 7. Clean up temporary files
+    await fsPromises.unlink(qrFilePath).catch(() => {});
+    await fsPromises.unlink(projectQrPath).catch(() => {});
+
+    // 8. Send PDF
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="card_${shortCode}.pdf"`);
     res.send(pdfBuffer);
@@ -4683,6 +4737,44 @@ async function runMigrations() {
   }
 })();
 
+const os = require('os');
+const { v4: uuidv4 } = require('uuid'); // or use timestamp
+
+function buildVCardString(cardData) {
+  const {
+    firstName = '',
+    middleName = '',
+    lastName = '',
+    prefix = '',
+    suffix = '',
+    title = '',
+    company = '',
+    email = '',
+    phone = '',
+    website = '',
+    bio = ''
+  } = cardData;
+
+  // Build FN (full name)
+  const fullName = [prefix, firstName, middleName, lastName, suffix]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+  // vCard 3.0 format – matches frontend exactly
+  let vcard = 'BEGIN:VCARD\nVERSION:3.0\n';
+  if (fullName) vcard += `FN:${fullName}\n`;
+  vcard += `N:${lastName};${firstName};${middleName};${prefix};${suffix}\n`;
+  if (company) vcard += `ORG:${company}\n`;
+  if (title) vcard += `TITLE:${title}\n`;
+  if (phone) vcard += `TEL;TYPE=CELL:${phone}\n`;
+  if (email) vcard += `EMAIL;TYPE=WORK:${email}\n`;
+  if (website) vcard += `URL:${website}\n`;
+  if (bio) vcard += `NOTE:${bio}\n`;
+  vcard += 'END:VCARD';
+  return vcard;
+}
+
 const latex = require('node-latex');
 const { Readable } = require('stream');
 //const fs = require('fs');
@@ -4693,13 +4785,13 @@ function fillLaTeXTemplate(cardData) {
   const templatePath = path.join(__dirname, 'latex_templates', 'business_card_template.tex');
   let texContent = fs.readFileSync(templatePath, 'utf8');
 
+  const fullName = [cardData.prefix, cardData.firstName, cardData.middleName, cardData.lastName, cardData.suffix]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
   // 1. Replace placeholders with escaped values
   const replacements = {
-    '{{firstName}}': escapeLatex(cardData.firstName || ''),
-    '{{middleName}}': escapeLatex(cardData.middleName || ''),
-    '{{lastName}}': escapeLatex(cardData.lastName || ''),
-    '{{prefix}}': escapeLatex(cardData.prefix || ''),
-    '{{suffix}}': escapeLatex(cardData.suffix || ''),
+    '{{fullName}}': escapeLatex(fullName ),
     '{{title}}': escapeLatex(cardData.title || ''),
     '{{email}}': escapeLatex(cardData.email || ''),
     '{{phone}}': escapeLatex(cardData.phone || ''),

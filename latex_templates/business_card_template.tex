@@ -1,3 +1,4 @@
+
 \documentclass[10pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[margin=0.5cm, paperwidth=9cm, paperheight=5cm]{geometry}
@@ -7,8 +8,10 @@
 
 \begin{document}
 \pagenumbering{gobble}
-\begin{center}
-   \Large \textbf{ {{prefix}} {{firstName}} {{lastName}} {{suffix}} }\\
+
+\begin{minipage}{0.7\textwidth}
+  \begin{center}
+    \Large \textbf{ {{fullName}} }
     \vspace{2mm}
 
     \normalsize {{title}}
@@ -18,11 +21,22 @@
         \faEnvelope ~ {{email}} \\
         \faPhone ~ {{phone}} \\
         \faGlobe ~ {{website}}
-    \end{tabular}\\
+    \end{tabular}
     \vspace{2mm}
 
-    \footnotesize {{company}}\\
-    \vspace{1mm}
-    \small \texttt{Powered by Swiish}
+    \footnotesize {{company}}
+  \end{center}
+\end{minipage}
+\hfill
+\begin{minipage}{1.8cm}
+    \includegraphics[width=1.8cm,height=1.8cm]{{{qrImage}}}
+\end{minipage}
+
+
+% The placeholder will be replaced by \includegraphics command
+
+\vspace{2mm}
+\begin{center}
+  \small \texttt{Powered by Swiish}
 \end{center}
 \end{document}

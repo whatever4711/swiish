@@ -2466,6 +2466,41 @@ function PublicCardRoute({ view, isPublicLoading, error, data, settings, darkMod
   );
 }
 
+function buildVCardString(cardData) {
+  const {
+    firstName = '',
+    middleName = '',
+    lastName = '',
+    prefix = '',
+    suffix = '',
+    title = '',
+    company = '',
+    email = '',
+    phone = '',
+    website = '',
+    bio = ''
+  } = cardData;
+
+  // Build FN (full name)
+  const fullName = [prefix, firstName, middleName, lastName, suffix]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+  // vCard 3.0 format – matches frontend exactly
+  let vcard = 'BEGIN:VCARD\nVERSION:3.0\n';
+  if (fullName) vcard += `FN:${fullName}\n`;
+  vcard += `N:${lastName};${firstName};${middleName};${prefix};${suffix}\n`;
+  if (company) vcard += `ORG:${company}\n`;
+  if (title) vcard += `TITLE:${title}\n`;
+  if (phone) vcard += `TEL;TYPE=CELL:${phone}\n`;
+  if (email) vcard += `EMAIL;TYPE=WORK:${email}\n`;
+  if (website) vcard += `URL:${website}\n`;
+  if (bio) vcard += `NOTE:${bio}\n`;
+  vcard += 'END:VCARD';
+  return vcard;
+}
+
 function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
   const { personal = {}, contact = {}, social = {}, images = {}, theme = { color: 'indigo' }, links = [], privacy = {} } = data;
   const themeColor = settings?.theme_colors?.find(c => c.name === theme.color);
@@ -2768,42 +2803,12 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
   }, [showQR, qrMode, qrSimpleDataUrl, qrRichDataUrl, personal, contact, social, images, theme, data]);
 
   const generateVCard = () => {
-    const firstName = sanitizeText(personal.firstName || '');
-    const middleName = sanitizeText(personal.middleName || '');
-    const lastName = sanitizeText(personal.lastName || '');
-    const prefix = sanitizeText(personal.prefix || '');
-    const suffix = sanitizeText(personal.suffix || '');
-    const company = sanitizeText(personal.company || '');
-    const title = sanitizeText(personal.title || '');
-    const phone = sanitizeText(contact.phone || '');
-    const email = sanitizeText(contact.email || '');
-    const website = sanitizeText(contact.website || '');
-    const bio = sanitizeText(personal.bio || '');
-
-    let fullName = '';
-    if (prefix) fullName += prefix + ' ';
-    fullName += firstName + ' ';
-    if (middleName) fullName+= middleName + ' '
-    fullName += lastName;
-    if (suffix) fullName += ' ' + suffix;
-    fullName = fullName.trim();
-    
-    const vcard = `BEGIN:VCARD
-VERSION:3.0
-FN:${fullName}
-N:${lastName};${firstName};${middleName};${prefix};${suffix}
-ORG:${company}
-TITLE:${title}
-TEL;TYPE=CELL:${phone}
-EMAIL;TYPE=WORK:${email}
-URL:${website}
-NOTE:${bio}
-END:VCARD`;
+    const vcard = buildVCardString(personal);
     const blob = new Blob([vcard], { type: 'text/vcard' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${firstName}_${lastName}.vcf`;
+    link.download = `${personal.firstName}_${personal.lastName}.vcf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
