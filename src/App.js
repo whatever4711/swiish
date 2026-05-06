@@ -93,10 +93,13 @@ const buildQrPayload = (shortCode, data) => {
   const prefix = safe(personal.prefix || '', 20);
   const suffix = safe(personal.suffix || '', 20);
   const firstName = safe(personal.firstName || '', 40);
+  const middleName = safe(personal.middleName || '', 40);
   const lastName = safe(personal.lastName || '', 40);
   let fullName = '';
   if (prefix) fullName += prefix + ' ';
-  fullName += firstName + ' ' + lastName;
+  fullName += firstName + ' ';
+  if (middleName) fullName+= middleName + ' '
+  fullName += lastName;
   if (suffix) fullName += ' ' + suffix;
   fullName = fullName.trim();
   const company = safe(personal.company || '', 80);
@@ -113,7 +116,7 @@ const buildQrPayload = (shortCode, data) => {
   
   if (fullName) {
     vcard += `FN:${fullName}\n`;
-    vcard += `N:${lastName};${firstName};;;\n`;
+    vcard += `N:${lastName};${firstName};${middleName};${prefix};${suffix}\n`;
   }
   
   if (company) {
@@ -196,6 +199,7 @@ const ICON_MAP = {
 const getDefaultTemplate = (settings) => ({
   personal: {
     firstName: "New",
+    middleName: "",
     lastName: "User",
     prefix: "",
     suffix: "",
@@ -1112,8 +1116,11 @@ const [settings, setSettings] = useState({
         setIsPublicLoading(false);
         setData(mergedData);
         setView('public-card');
-        const name = `${cardData.personal?.firstName || ''} ${cardData.personal?.lastName || ''}`.trim();
-        document.title = name || 'Card';
+        const prefix = cardData.personal.prefix ? cardData.personal.prefix + ' ' : '';
+        const suffix = cardData.personal.suffix ? ' ' + cardData.personal.suffix : '';
+        const middleName = cardData.personal.middleName ? ' ' + cardData.personal.middleName : '';
+        const fullName = sanitizeText(`${prefix}${cardData.personal.firstName || ''} ${middleName}${cardData.personal.lastName || ''}${suffix}`).trim();
+        document.title = fullName || 'Card';
       } else {
         setView('404');
         setError('Card not found');
@@ -1150,8 +1157,12 @@ const [settings, setSettings] = useState({
         setIsPublicLoading(false);
         setData(mergedData);
         setView('public-card');
-        const name = `${cardData.personal?.firstName || ''} ${cardData.personal?.lastName || ''}`.trim();
-        document.title = name || 'Card';
+
+        const prefix = cardData.personal.prefix ? cardData.personal.prefix + ' ' : '';
+        const suffix = cardData.personal.suffix ? ' ' + cardData.personal.suffix : '';
+        const middleName = cardData.personal.middleName ? ' ' + cardData.personal.middleName : '';
+        const fullName = sanitizeText(`${prefix}${cardData.personal.firstName || ''} ${middleName}${cardData.personal.lastName || ''}${suffix}`).trim();
+        document.title = fullName || 'Card';
       } else {
         setView('404');
         setError('Card not found');
@@ -2568,7 +2579,8 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
   useEffect(() => {
     const prefix = personal.prefix ? personal.prefix + ' ' : '';
     const suffix = personal.suffix ? ' ' + personal.suffix : '';
-    const fullName = sanitizeText(`${prefix}${personal.firstName || ''} ${personal.lastName || ''}${suffix}`).trim();
+    const middleName = personal.middleName ? ' ' + personal.middleName : '';
+    const fullName = sanitizeText(`${prefix}${personal.firstName || ''} ${middleName}${personal.lastName || ''}${suffix}`).trim();
     if (fullName) document.title = fullName;
   }, [personal]);
 
@@ -2757,6 +2769,7 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
 
   const generateVCard = () => {
     const firstName = sanitizeText(personal.firstName || '');
+    const middleName = sanitizeText(personal.middleName || '');
     const lastName = sanitizeText(personal.lastName || '');
     const prefix = sanitizeText(personal.prefix || '');
     const suffix = sanitizeText(personal.suffix || '');
@@ -2766,11 +2779,19 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
     const email = sanitizeText(contact.email || '');
     const website = sanitizeText(contact.website || '');
     const bio = sanitizeText(personal.bio || '');
+
+    let fullName = '';
+    if (prefix) fullName += prefix + ' ';
+    fullName += firstName + ' ';
+    if (middleName) fullName+= middleName + ' '
+    fullName += lastName;
+    if (suffix) fullName += ' ' + suffix;
+    fullName = fullName.trim();
     
     const vcard = `BEGIN:VCARD
 VERSION:3.0
-FN:${firstName} ${lastName}
-N:${lastName};${firstName};;${prefix};${suffix}
+FN:${fullName}
+N:${lastName};${firstName};${middleName};${prefix};${suffix}
 ORG:${company}
 TITLE:${title}
 TEL;TYPE=CELL:${phone}
@@ -2795,7 +2816,10 @@ END:VCARD`;
   const isShortCodeRoute = pathParts.length === 1 && /^[a-zA-Z0-9]{7}$/.test(pathParts[0]);
   const shortCode = data._shortCode || (isShortCodeRoute ? pathParts[0] : null);
   const shortUrl = shortCode ? `${window.location.origin}/${shortCode}` : '';
-  const cardName = `${personal.firstName || ''} ${personal.lastName || ''}`.trim();
+  const prefix = personal.prefix ? personal.prefix + ' ' : '';
+  const suffix = personal.suffix ? ' ' + personal.suffix : '';
+  const middleName = personal.middleName ? ' ' + personal.middleName : '';
+  const cardName = sanitizeText(`${prefix}${personal.firstName || ''} ${middleName}${personal.lastName || ''}${suffix}`).trim();
   const company = personal.company || '';
 
   // If QR is shown, render only the QR view (full screen, independent of card)
@@ -3004,7 +3028,7 @@ END:VCARD`;
         <div className="space-y-1 mb-8">
           <h1 className="text-3xl font-bold text-text-primary dark:text-text-primary-dark tracking-tight">
             {sanitizeText(
-                `${personal.prefix ? personal.prefix + ' ' : ''}${personal.firstName || ''} ${personal.lastName || ''}${personal.suffix ? ' ' + personal.suffix : ''}`
+                `${personal.prefix ? personal.prefix + ' ' : ''}${personal.firstName || ''} ${personal.middleName ? personal.middleName + ' ' : ''}${personal.lastName || ''}${personal.suffix ? ' ' + personal.suffix : ''}`
             ).trim() || 'Untitled'}
           </h1>
           {(() => {
@@ -3413,11 +3437,13 @@ function EditorView({ data, setData, onBack, onSave, slug, settings, csrfToken, 
            {activeTab === 'details' && (
              <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="First Name" value={data.personal.firstName} onChange={v => handleInputChange('personal', 'firstName', v)} />
-                  <Input label="Last Name" value={data.personal.lastName} onChange={v => handleInputChange('personal', 'lastName', v)} />
                   {/* New prefix and suffix */}
                   <Input label="Prefix (e.g., Dr.)" value={data.personal.prefix} onChange={v => handleInputChange('personal', 'prefix', v)} />
                   <Input label="Suffix (e.g., PhD)" value={data.personal.suffix} onChange={v => handleInputChange('personal', 'suffix', v)} />
+                  <Input label="First Name" value={data.personal.firstName} onChange={v => handleInputChange('personal', 'firstName', v)} />
+                  <Input label="Middle Name" value={data.personal.middleName} onChange={v => handleInputChange('personal', 'middleName', v)} />
+                  <Input label="Last Name" value={data.personal.lastName} onChange={v => handleInputChange('personal', 'lastName', v)} />
+
                   <Input label="Job Title" value={data.personal.title} onChange={v => handleInputChange('personal', 'title', v)} />
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-text-primary dark:text-text-secondary-dark">Organisation</label>

@@ -883,13 +883,18 @@ async function generateGenericPreviewImage() {
  */
 async function generatePreviewImage(cardData, themeColor) {
   try {
-    const firstName = cardData.personal?.firstName || '';
-    const lastName = cardData.personal?.lastName || '';
+    const prefix = cardData.personal?.prefix ? cardData.personal.prefix + ' ' : '';
+    const suffix = cardData.personal?.suffix ? ' ' + cardData.personal.suffix : '';
+    const first = (cardData.personal?.firstName || '').trim();
+    const middle = cardData.personal?.middleName ? ' ' + cardData.personal.middleName : '';
+    const last = (cardData.personal?.lastName || '').trim();
+    const fullName = `${prefix}${first} ${middle}${last}${suffix}`.trim();
+
     const title = cardData.personal?.title || '';
     const avatarUrl = cardData.images?.avatar || '';
 
     // Escape content for safe XML inclusion
-    const escapedName = escapeXml(`${firstName} ${lastName}`.trim());
+    const escapedName = escapeXml(fullName);
     const escapedTitle = escapeXml(title);
     const escapedCompany = escapeXml(cardData.personal?.company || '');
     const colorHex = getThemeColorHex(themeColor);
@@ -1342,6 +1347,7 @@ function ensureUniqueShortCode(db, callback) {
 
 const cardDataValidation = [
   body('personal.firstName').optional().trim().isLength({ max: 100 }).withMessage('First name too long'),
+  body('personal.middleName').optional().trim().isLength({ max: 100 }).withMessage('Middle name too long'),
   body('personal.lastName').optional().trim().isLength({ max: 100 }).withMessage('Last name too long'),
   body('personal.prefix').optional().isString().isLength({ max: 50 }),
   body('personal.suffix').optional().isString().isLength({ max: 50 }),
@@ -1491,7 +1497,12 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
             if (row.slug && row.data) {
               try {
                 const parsed = JSON.parse(row.data);
-                result.name = `${parsed.personal?.firstName || ''} ${parsed.personal?.lastName || ''}`.trim();
+                const prefix = parsed.personal?.prefix ? parsed.personal.prefix + ' ' : '';
+                const suffix = parsed.personal?.suffix ? ' ' + parsed.personal.suffix : '';
+                const first = (parsed.personal?.firstName || '').trim();
+                const middle = parsed.personal?.middleName ? ' ' + parsed.personal.middleName : '';
+                const last = (parsed.personal?.lastName || '').trim();
+                result.name = `${prefix}${first} ${middle}${last}${suffix}`.trim();
                 result.title = parsed.personal?.title || '';
                 result.avatar = parsed.images?.avatar || null;
                 result.email = (parsed.contact?.email || '').toLowerCase();
@@ -1590,7 +1601,12 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
         if (row.slug && row.data) {
           try {
             const parsed = JSON.parse(row.data);
-            result.name = `${parsed.personal?.firstName || ''} ${parsed.personal?.lastName || ''}`.trim();
+            const prefix = parsed.personal?.prefix ? parsed.personal.prefix + ' ' : '';
+            const suffix = parsed.personal?.suffix ? ' ' + parsed.personal.suffix : '';
+            const first = (parsed.personal?.firstName || '').trim();
+            const middle = parsed.personal?.middleName ? ' ' + parsed.personal.middleName : '';
+            const last = (parsed.personal?.lastName || '').trim();
+            result.name = `${prefix}${first} ${middle}${last}${suffix}`.trim();
             result.title = parsed.personal?.title || '';
             result.avatar = parsed.images?.avatar || null;
             result.email = (parsed.contact?.email || '').toLowerCase();
@@ -1610,11 +1626,17 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
       // For other cases (owner without org, or member), use original logic
       try {
         const parsed = JSON.parse(row.data);
+        const prefix = parsed.personal?.prefix ? parsed.personal.prefix + ' ' : '';
+        const suffix = parsed.personal?.suffix ? ' ' + parsed.personal.suffix : '';
+        const first = (parsed.personal?.firstName || '').trim();
+        const middle = parsed.personal?.middleName ? ' ' + parsed.personal.middleName : '';
+        const last = (parsed.personal?.lastName || '').trim();
+        const fullname = `${prefix}${first} ${middle}${last}${suffix}`.trim()
         const result = {
           slug: row.slug,
           shortCode: row.short_code || null,
           orgSlug: row.org_slug || null,
-          name: `${parsed.personal?.firstName || ''} ${parsed.personal?.lastName || ''}`.trim(),
+          name: fullname,
           title: parsed.personal?.title || '',
           avatar: parsed.images?.avatar || null,
           email: (parsed.contact?.email || '').toLowerCase()
@@ -2052,6 +2074,7 @@ app.post('/api/cards/:slug', requireAuth, apiLimiter, csrfProtection, [
   const sanitizedData = {
     personal: {
       firstName: (req.body.personal?.firstName || '').trim().substring(0, 100),
+      middleName: (req.body.personal?.middleName || '').trim().substring(0, 100),
       lastName: (req.body.personal?.lastName || '').trim().substring(0, 100),
       prefix: (req.body.personal?.prefix || '').trim().substring(0, 50),   // NEW
       suffix: (req.body.personal?.suffix || '').trim().substring(0, 50),   // NEW
@@ -3711,9 +3734,12 @@ app.get('/manifest/:slug.json', publicReadLimiter, [
     if (row && row.data) {
       try {
         const parsed = JSON.parse(row.data);
+        const prefix = parsed.personal?.prefix ? parsed.personal.prefix + ' ' : '';
+        const suffix = parsed.personal?.suffix ? ' ' + parsed.personal.suffix : '';
         const first = (parsed.personal?.firstName || '').trim();
+        const middle = parsed.personal?.middleName ? ' ' + parsed.personal.middleName : '';
         const last = (parsed.personal?.lastName || '').trim();
-        const full = `${first} ${last}`.trim();
+        const full = `${prefix}${first} ${middle}${last}${suffix}`.trim();
         cardName = full || parsed.personal?.company || cardName;
       } catch (e) {
         // fallback to default cardName
@@ -4040,11 +4066,17 @@ async function injectMetaTags(html, cardIdentifier, displayIdentifier) {
     }
 
     // Safe to include preview - construct meta tags
-    const firstName = escapeXml(cardData.personal?.firstName || '');
-    const lastName = escapeXml(cardData.personal?.lastName || '');
+    //const firstName = escapeXml(cardData.personal?.firstName || '');
+    //const lastName = escapeXml(cardData.personal?.lastName || '');
+    const prefix = cardData.personal?.prefix ? cardData.personal.prefix + ' ' : '';
+    const suffix = cardData.personal?.suffix ? ' ' + cardData.personal.suffix : '';
+    const first = (cardData.personal?.firstName || '').trim();
+    const middle = cardData.personal?.middleName ? ' ' + cardData.personal.middleName : '';
+    const last = (cardData.personal?.lastName || '').trim();
+    const fullName = `${prefix}${first} ${middle}${last}${suffix}`.trim();
     const title = escapeXml(cardData.personal?.title || '');
     const company = escapeXml(cardData.personal?.company || '');
-    const fullName = `${firstName} ${lastName}`.trim();
+    //const fullName = `${firstName} ${lastName}`.trim();
     const description = title ? `${title} at ${company}` : company || 'Digital Business Card';
 
     // Construct preview image URL with cache-busting timestamp
@@ -4664,6 +4696,7 @@ function fillLaTeXTemplate(cardData) {
   // 1. Replace placeholders with escaped values
   const replacements = {
     '{{firstName}}': escapeLatex(cardData.firstName || ''),
+    '{{middleName}}': escapeLatex(cardData.middleName || ''),
     '{{lastName}}': escapeLatex(cardData.lastName || ''),
     '{{prefix}}': escapeLatex(cardData.prefix || ''),
     '{{suffix}}': escapeLatex(cardData.suffix || ''),
