@@ -1822,24 +1822,28 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
 
     // 2. Generate unique QR image filename and save to temp directory
     const tempDir = os.tmpdir();
-    const qrFileName = `qr_${shortCode}_${Date.now()}.png`;
-    const qrFilePath = path.join(tempDir, qrFileName);
-    await QRCode.toFile(qrFilePath, vcardString, {
+    const uniqueId = `${shortCode}_${Date.now()}`;
+    const qrFileName = `qr_${uniqueId}.png`;
+    const qrTempPath = path.join(tempDir, qrFileName);
+    await QRCode.toFile(qrTempPath, vcardString, {
       width: 200,
       margin: 1,
       errorCorrectionLevel: 'M'
     });
 
-    // 3. Copy QR image to the project root (where pdflatex runs)
-    const projectQrPath = path.join(process.cwd(), qrFileName);
-    await fsPromises.copyFile(qrFilePath, projectQrPath);
+    // Create a dedicated build directory (inside system temp)
+    const buildDir = path.join(tempDir, `latex_build_${uniqueId}`);
+    await fsPromises.mkdir(buildDir, { recursive: true });
+    // Copy QR image into build directory
+    const qrBuildPath = path.join(buildDir, qrFileName);
+    await fsPromises.copyFile(qrTempPath, qrBuildPath);
     // After copying QR image to projectQrPath, verify it exists
+    // Verify QR image exists in build dir
     try {
-      await fsPromises.access(projectQrPath);
-      console.log(`[PDF] QR image exists at ${projectQrPath}`);
+      await fsPromises.access(qrBuildPath);
+      console.log(`[PDF] QR image available at ${qrBuildPath}`);
     } catch (err) {
-      console.error('[PDF] QR image missing after copy:', err);
-      throw new Error('QR image file not found');
+      throw new Error(`QR image missing after copy: ${err.message}`);
     }
 
     // 4. Get the filled LaTeX template (without QR yet)
@@ -1851,22 +1855,29 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
 
     texContent = texContent.replace(/{{qrImage}}/g, `${qrFileName}`);
 
+    // Write the .tex file to build directory (optional, but helps debugging)
+    const texFilePath = path.join(buildDir, `card_${shortCode}.tex`);
+    await fsPromises.writeFile(texFilePath, texContent);
+
     // 6. Compile PDF
     const inputStream = Readable.from([texContent]);
     const pdfStream = latex(inputStream, {
-      cwd: process.cwd(),          // run pdflatex from project root
-      inputs: [process.cwd(), tempDir]  // search for files in these directories
+      cwd: buildDir,
+      inputs: [buildDir]  // ensure LaTeX looks here
     });
     const pdfBuffer = await new Promise((resolve, reject) => {
       const chunks = [];
       pdfStream.on('data', chunk => chunks.push(chunk));
       pdfStream.on('end', () => resolve(Buffer.concat(chunks)));
-      pdfStream.on('error', reject);
+      pdfStream.on('error', (err) => {
+        console.error('[PDF] LaTeX compilation error:', err);
+        reject(err);
+      });
     });
 
-    // 7. Clean up temporary files
-    await fsPromises.unlink(qrFilePath).catch(() => {});
-    await fsPromises.unlink(projectQrPath).catch(() => {});
+    // 8. Clean up: delete build directory and temporary QR image
+    await fsPromises.rm(buildDir, { recursive: true, force: true });
+    await fsPromises.unlink(qrTempPath).catch(() => {});
 
     // 8. Send PDF
     res.setHeader('Content-Type', 'application/pdf');
