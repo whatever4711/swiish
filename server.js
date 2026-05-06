@@ -1752,47 +1752,38 @@ const fsPromises = require('fs').promises;
 
 app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
   const shortCode = (req.params.shortCode || '').trim();
-  const format = req.query.format || 'pdf'; // 'pdf' or 'tex'
-  const SHORT_CODE_LENGTH = 7; // from Swiish constant
+  const format = req.query.format || 'pdf';      // 'pdf' or 'tex'
+  const layout = req.query.layout || 'single';   // 'single' or 'a4'
+  const SHORT_CODE_LENGTH = 7;
 
-  // 1. Validate short code (exactly 7 alphanumeric chars)
-  if (!shortCode || shortCode.length !== SHORT_CODE_LENGTH) {
-    return res.status(400).json({ error: `Short code must be exactly ${SHORT_CODE_LENGTH} characters` });
-  }
-  if (!new RegExp(`^[a-zA-Z0-9]{${SHORT_CODE_LENGTH}}$`).test(shortCode)) {
-    return res.status(400).json({ error: 'Short code must contain only letters and numbers' });
+  if (!shortCode || shortCode.length !== SHORT_CODE_LENGTH ||
+      !new RegExp(`^[a-zA-Z0-9]{${SHORT_CODE_LENGTH}}$`).test(shortCode)) {
+    return res.status(400).json({ error: 'Invalid short code' });
   }
 
   try {
-    // 2. Query the database using the same logic as the GET /api/cards/short/:shortCode endpoint
+    // 1. Fetch card data (same as before)
     const row = await new Promise((resolve, reject) => {
       db.get(`
-        SELECT c.data, c.short_code, o.slug as org_slug
+        SELECT c.data, c.short_code
         FROM cards c
-        JOIN users u ON c.user_id = u.id
-        LEFT JOIN organisations o ON u.organisation_id = o.id
         WHERE c.short_code = ?
       `, [shortCode], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
     });
+    if (!row) return res.status(404).json({ error: 'Card not found' });
 
-    if (!row) {
-      return res.status(404).json({ error: 'Card not found' });
-    }
-
-    // 3. Parse the stored JSON data
     let cardData;
     try {
       cardData = JSON.parse(row.data);
     } catch (e) {
-      console.error('[PDF] Error parsing card data:', e);
       return res.status(500).json({ error: 'Invalid card data format' });
     }
-    console.log('[DEBUG] Raw cardData from DB:', JSON.stringify(cardData, null, 2));
-    console.log('[DEBUG] Available top-level keys:', Object.keys(cardData));
-    // 4. Extract fields needed for the PDF (fallback to empty strings)
+
+
+    // 2. Extract pdfData (with all fields)
     const pdfData = {
       firstName: cardData.personal?.firstName || '',
       middleName: cardData.personal?.middleName || '',
@@ -1807,81 +1798,106 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       bio: cardData.personal?.bio || ''
     };
 
-
-    // If format=tex, return the filled LaTeX source (without QR image injection)
+    // If format=tex, return the filled LaTeX source of the SINGLE card template
     if (format === 'tex') {
-      const filledTex = fillLaTeXTemplate(pdfData);
+      const fullName = [pdfData.prefix, pdfData.firstName, pdfData.middleName, pdfData.lastName, pdfData.suffix]
+          .filter(Boolean).join(' ').trim();
+      // Read the card content template and replace placeholders
+      const contentTemplatePath = path.join(__dirname, 'latex_templates', 'card_content.tex');
+      let content = await fsPromises.readFile(contentTemplatePath, 'utf8');
+      const replacements = {
+        '{{fullName}}': escapeLatex(fullName),
+        '{{title}}': escapeLatex(pdfData.title || ''),
+        '{{email}}': escapeLatex(pdfData.email || ''),
+        '{{phone}}': escapeLatex(pdfData.phone || ''),
+        '{{website}}': escapeLatex(pdfData.website || ''),
+        '{{company}}': escapeLatex(pdfData.company || '')
+      };
+      for (const [placeholder, value] of Object.entries(replacements)) {
+        content = content.split(placeholder).join(value);
+      }
+      // Wrap in a complete document with geometry and QR placeholder
+      const mainTemplatePath = path.join(__dirname, 'latex_templates', 'business_card_template.tex');
+      let mainTex = await fsPromises.readFile(mainTemplatePath, 'utf8');
+      // Replace the \input{card_content.tex} line with the actual content
+      mainTex = mainTex.replace(/\\input\{card_content\.tex\}/, content);
       res.setHeader('Content-Type', 'text/plain');
       res.setHeader('Content-Disposition', `attachment; filename="card_${shortCode}.tex"`);
-      return res.send(filledTex);
+      return res.send(mainTex);
     }
 
-    // ---- PDF generation with QR code ----
-    // 1. Build vCard string
+    // --- PDF generation (both single and a4) ---
+    // Build vCard and generate QR
     const vcardString = buildVCardString(pdfData);
-
-    // 2. Generate unique QR image filename and save to temp directory
     const tempDir = os.tmpdir();
     const uniqueId = `${shortCode}_${Date.now()}`;
     const qrFileName = `qr_${uniqueId}.png`;
     const qrTempPath = path.join(tempDir, qrFileName);
-    await QRCode.toFile(qrTempPath, vcardString, {
-      width: 200,
-      margin: 1,
-      errorCorrectionLevel: 'M'
-    });
+    await QRCode.toFile(qrTempPath, vcardString, { width: 200, margin: 1 });
 
-    // Create a dedicated build directory (inside system temp)
+    // Create build directory
     const buildDir = path.join(tempDir, `latex_build_${uniqueId}`);
     await fsPromises.mkdir(buildDir, { recursive: true });
-    // Copy QR image into build directory
-    const qrBuildPath = path.join(buildDir, qrFileName);
+
+    // Copy QR image to build dir as 'qr_image.png' (used by card_content.tex)
+    const qrBuildPath = path.join(buildDir, 'qr_image.png');
     await fsPromises.copyFile(qrTempPath, qrBuildPath);
-    // After copying QR image to projectQrPath, verify it exists
-    // Verify QR image exists in build dir
-    try {
-      await fsPromises.access(qrBuildPath);
-      console.log(`[PDF] QR image available at ${qrBuildPath}`);
-    } catch (err) {
-      throw new Error(`QR image missing after copy: ${err.message}`);
+
+    // Generate filled card_content.tex inside build dir
+    const contentTemplatePath = path.join(__dirname, 'latex_templates', 'card_content.tex');
+    let cardContent = await fsPromises.readFile(contentTemplatePath, 'utf8');
+    const fullName = [pdfData.prefix, pdfData.firstName, pdfData.middleName, pdfData.lastName, pdfData.suffix]
+        .filter(Boolean).join(' ').trim();
+    const replacements = {
+      '{{fullName}}': escapeLatex(fullName),
+      '{{title}}': escapeLatex(pdfData.title || ''),
+      '{{email}}': escapeLatex(pdfData.email || ''),
+      '{{phone}}': escapeLatex(pdfData.phone || ''),
+      '{{website}}': escapeLatex(pdfData.website || ''),
+      '{{company}}': escapeLatex(pdfData.company || '')
+    };
+    for (const [placeholder, value] of Object.entries(replacements)) {
+      cardContent = cardContent.split(placeholder).join(value);
     }
+    // Ensure it uses the correct QR filename (already 'qr_image.png')
+    cardContent = cardContent.replace(/{{qrImage}}/g, 'qr_image.png');
+    const cardContentPath = path.join(buildDir, 'card_content.tex');
+    await fsPromises.writeFile(cardContentPath, cardContent);
 
-    // 4. Get the filled LaTeX template (without QR yet)
-    let texContent = fillLaTeXTemplate(pdfData);
+    // Choose main template based on layout
+    let mainTemplatePath;
+    let outputFileName;
+    if (layout === 'a4') {
+      mainTemplatePath = path.join(__dirname, 'latex_templates', 'business_card_sheet.tex');
+      outputFileName = `cards_${shortCode}_a4.pdf`;
+    } else {
+      mainTemplatePath = path.join(__dirname, 'latex_templates', 'business_card_template.tex');
+      outputFileName = `card_${shortCode}.pdf`;
+    }
+    let mainTex = await fsPromises.readFile(mainTemplatePath, 'utf8');
+    // The main tex files \input{card_content.tex} – we leave it as is because the file exists in buildDir
 
-    // 5. Inject the QR code command into the LaTeX source
-    //    We assume the template has a placeholder {{qrImage}} that we replace with the actual \includegraphics
-    //    Or we can insert the command at a specific location, e.g., after \begin{document}
+    // Write main tex to build directory (optional but helps debugging)
+    const mainTexPath = path.join(buildDir, `main.tex`);
+    await fsPromises.writeFile(mainTexPath, mainTex);
 
-    texContent = texContent.replace(/{{qrImage}}/g, `${qrFileName}`);
-
-    // Write the .tex file to build directory (optional, but helps debugging)
-    const texFilePath = path.join(buildDir, `card_${shortCode}.tex`);
-    await fsPromises.writeFile(texFilePath, texContent);
-
-    // 6. Compile PDF
-    const inputStream = Readable.from([texContent]);
-    const pdfStream = latex(inputStream, {
-      cwd: buildDir,
-      inputs: [buildDir]  // ensure LaTeX looks here
-    });
+    // Compile PDF
+    const inputStream = Readable.from([mainTex]);
+    const pdfStream = latex(inputStream, { cwd: buildDir, inputs: [buildDir] });
     const pdfBuffer = await new Promise((resolve, reject) => {
       const chunks = [];
       pdfStream.on('data', chunk => chunks.push(chunk));
       pdfStream.on('end', () => resolve(Buffer.concat(chunks)));
-      pdfStream.on('error', (err) => {
-        console.error('[PDF] LaTeX compilation error:', err);
-        reject(err);
-      });
+      pdfStream.on('error', reject);
     });
 
-    // 8. Clean up: delete build directory and temporary QR image
+    // Cleanup
     await fsPromises.rm(buildDir, { recursive: true, force: true });
     await fsPromises.unlink(qrTempPath).catch(() => {});
 
-    // 8. Send PDF
+    // Send PDF
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="card_${shortCode}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
     res.send(pdfBuffer);
 
   } catch (err) {
@@ -4839,6 +4855,35 @@ function fillLaTeXTemplate(cardData) {
   return cleaned;
 }
 
+async function generateFilledCardContent(buildDir, pdfData, qrFileName) {
+  const templatePath = path.join(__dirname, 'latex_templates', 'card_content.tex');
+  let content = await fsPromises.readFile(templatePath, 'utf8');
+
+  const fullName = [pdfData.prefix, pdfData.firstName, pdfData.middleName, pdfData.lastName, pdfData.suffix]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+  const replacements = {
+    '{{fullName}}': escapeLatex(fullName),
+    '{{title}}': escapeLatex(pdfData.title || ''),
+    '{{email}}': escapeLatex(pdfData.email || ''),
+    '{{phone}}': escapeLatex(pdfData.phone || ''),
+    '{{website}}': escapeLatex(pdfData.website || ''),
+    '{{company}}': escapeLatex(pdfData.company || '')
+  };
+
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    content = content.split(placeholder).join(value);
+  }
+
+  // Replace the QR filename placeholder (if any)
+  content = content.replace(/{{qrImage}}/g, qrFileName);
+
+  const filledPath = path.join(buildDir, 'card_content.tex');
+  await fsPromises.writeFile(filledPath, content);
+  return filledPath;
+}
 
 
 // Helper: compile filled LaTeX to PDF

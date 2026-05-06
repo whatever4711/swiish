@@ -1,0 +1,23 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.5cm, headheight=0pt, footskip=0pt]{geometry}
+\usepackage{graphicx}
+\usepackage{fontawesome}
+\usepackage{tabularx}
+\usepackage{pgffor}
+\usepackage{multicol}
+
+\setlength{\parindent}{0pt}
+\pagestyle{empty}
+
+\begin{document}
+    \begin{multicols}{2}
+        \foreach \i in {1,...,10} {
+
+            \begin{minipage}{.8\linewidth}
+                \input{card_content}
+            \end{minipage}
+            \vspace{2cm}
+        }
+    \end{multicols}
+\end{document}

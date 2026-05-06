@@ -2546,9 +2546,8 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
 
   const dropCallLink = ownerPhone ? `tel:${ownerPhone}` : null;
 
-  const downloadPdf = async () => {
+  const downloadPdf = async (layout = 'single') => {
     try {
-      // Determine short code from data or from URL
       let shortCode = data._shortCode;
       if (!shortCode) {
         const pathParts = window.location.pathname.substring(1).split('/').filter(p => p);
@@ -2556,26 +2555,22 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
         shortCode = isShortCodeRoute ? pathParts[0] : null;
       }
       if (!shortCode) {
-        console.error('[PDF] No short code found');
         if (showAlert) showAlert('Unable to generate PDF: missing short code', 'error');
         return;
       }
 
-      const response = await fetch(`/api/cards/${shortCode}/export-pdf`, {
+      const response = await fetch(`/api/cards/${shortCode}/export-pdf?layout=${layout}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Server responded with ${response.status}: ${errText}`);
-      }
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `card_${shortCode}.pdf`;
+      a.download = layout === 'a4' ? `cards_${shortCode}_a4.pdf` : `card_${shortCode}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -3153,16 +3148,27 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
           })()}
         </div>
 
-        {/* Download PDF Button */}
+        {/* Download Single Card PDF */}
         <div className="mb-8">
-        <button
-            onClick={downloadPdf}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold bg-surface dark:bg-surface-dark text-text-primary dark:text-text-primary-dark hover:bg-surface dark:hover:bg-surface-dark transition-colors border border-border dark:border-border-dark"
-        >
-          <Download className="w-5 h-5" />
-          Download Card as PDF
-        </button>
-      </div>
+          <button
+              onClick={() => downloadPdf('single')}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold bg-surface dark:bg-surface-dark text-text-primary dark:text-text-primary-dark hover:bg-surface dark:hover:bg-surface-dark transition-colors border border-border dark:border-border-dark"
+          >
+            <Download className="w-5 h-5" />
+            Download Card as PDF (Single)
+          </button>
+        </div>
+
+        {/* Download A4 Sheet (10 cards) */}
+        <div className="mb-8">
+          <button
+              onClick={() => downloadPdf('a4')}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold bg-surface dark:bg-surface-dark text-text-primary dark:text-text-primary-dark hover:bg-surface dark:hover:bg-surface-dark transition-colors border border-border dark:border-border-dark"
+          >
+            <Download className="w-5 h-5" />
+            Print 10 Cards on A4 Sheet
+          </button>
+        </div>
 
         {/* Send your details CTA */}
         <div className="mb-8">
