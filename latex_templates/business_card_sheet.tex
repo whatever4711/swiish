@@ -1,23 +1,28 @@
 \documentclass[10pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
-\usepackage[margin=1.5cm, headheight=0pt, footskip=0pt]{geometry}
+\usepackage[margin=1cm, headheight=0pt, footskip=0pt]{geometry}
 \usepackage{graphicx}
 \usepackage{fontawesome}
-\usepackage{tabularx}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usetikzlibrary{shadows}
 \usepackage{pgffor}
-\usepackage{multicol}
 
-\setlength{\parindent}{0pt}
 \pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+% A single card macro – input the content once
+\newcommand{\card}{%
+    \begin{minipage}[t]{85mm}
+    \input{card_content}%
+    \end{minipage}%
+}
 
 \begin{document}
-    \begin{multicols}{2}
-        \foreach \i in {1,...,10} {
-
-            \begin{minipage}{.8\linewidth}
-                \input{card_content}
-            \end{minipage}
-            \vspace{2cm}
-        }
-    \end{multicols}
+% 2 columns × 4 rows = 8 cards
+    \foreach \row in {1,...,4} {
+        \noindent
+        \card\hfill\card
+        \par\vspace{10mm}
+    }
 \end{document}
