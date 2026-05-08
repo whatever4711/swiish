@@ -1,8 +1,11 @@
 \documentclass[10pt]{article}
 \usepackage[utf8]{inputenc}
-\usepackage[margin=0mm, paperwidth=85mm, paperheight=55mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=0mm, paperwidth=85mm, paperheight=54mm]{geometry}
+%\usepackage[margin=5mm, paperwidth=110mm, paperheight=75mm]{geometry}
 \usepackage{graphicx}
-\usepackage{fontawesome}
+\usepackage{fontawesome5}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usetikzlibrary{shadows}
@@ -12,4 +15,29 @@
 
 \begin{document}
     \input{card_content}
+
+%Rückseite
+    \begin{tikzpicture}[x=1mm, y=1mm]
+  \path[use as bounding box] (0,0) rectangle (85,54);
+
+  \fill[teal] (0,0) rectangle (85,54);
+
+  \node[anchor=center, text=white, font=\sffamily\bfseries] at (42.5,43) {\Large Erwin Großmann GmbH \& Co. KG};
+
+  \node[anchor=center, text=white, align=center, font=\small] at (42.5,27) {%
+    Ludwigsstädter Straße 50\\[1mm]
+    96337 Ludwigsstadt\\[2mm]
+    {\faPhone} \ +49 9263 940-0\\[1mm]
+    {\faEnvelope} \ info@erwin-grossmann.de\\[1mm]
+    {\faGlobe} \ www.erwin-grossmann.de
+  };
+
+
+
+  \node[anchor=center, text=white!85, font=\footnotesize, align=center] at (42.5,10) {%
+    Ihr Partner für innovative Kunststoff-Verschlüsse\\[1mm]
+    und Verpackungslösungen
+  };
+
+\end{tikzpicture}
 \end{document}

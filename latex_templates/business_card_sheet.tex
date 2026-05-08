@@ -1,28 +1,37 @@
+% for https://www.bueromarkt-ag.de/visitenkarten_zweckform_c32010-25_85_x_54mm,p-c32010-25,l-google-css,pd-b2c.html?utm_source=google&utm_medium=cpc&utm_campaign=19550452798&gad_source=1
+%
 \documentclass[10pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
-\usepackage[margin=1cm, headheight=0pt, footskip=0pt]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[left=15mm, right=15mm, top=13mm, bottom=7mm, headheight=0pt, footskip=0pt]{geometry}
 \usepackage{graphicx}
-\usepackage{fontawesome}
+\usepackage{fontawesome5}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usetikzlibrary{shadows}
 \usepackage{pgffor}
-
+%
 \pagestyle{empty}
 \setlength{\parindent}{0pt}
-
-% A single card macro – input the content once
+\setlength{\parskip}{0pt}
+\raggedbottom
+%
+% Ensure that \linewidth matches the available width exactly
+% (already set by geometry to 180mm)
+%
 \newcommand{\card}{%
-    \begin{minipage}[t]{85mm}
-    \input{card_content}%
-    \end{minipage}%
+  \begin{minipage}[t][54mm][t]{85mm}
+  \input{card_content}%
+  \end{minipage}%
 }
-
+%
 \begin{document}
-% 2 columns × 4 rows = 8 cards
-    \foreach \row in {1,...,4} {
-        \noindent
-        \card\hfill\card
-        \par\vspace{10mm}
-    }
+  \nointerlineskip
+  \foreach \row in {1,...,5} {%
+    \noindent
+    \card\hfill\card
+    \ifnum \row < 5 \vspace{0pt}\fi
+    \par
+  }
 \end{document}

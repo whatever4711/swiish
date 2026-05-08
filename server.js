@@ -1793,7 +1793,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       title: cardData.personal?.title || '',
       company: cardData.personal?.company || '',
       email: cardData.contact?.email || '',
-      phone: cardData.contact?.phone || '',
+      phone: formatPhoneNumber(cardData.contact?.phone || ''),  // uses updated format
       website: cardData.contact?.website || '',
       bio: cardData.personal?.bio || ''
     };
@@ -1843,6 +1843,33 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     const qrBuildPath = path.join(buildDir, 'qr_image.png');
     await fsPromises.copyFile(qrTempPath, qrBuildPath);
 
+    // --- Copy logo.png if it exists in the templates folder ---
+    const logoTemplatePath = path.join(__dirname, 'latex_templates', 'logo.png');
+    try {
+      await fsPromises.access(logoTemplatePath);
+      const logoBuildPath = path.join(buildDir, 'logo.png');
+      await fsPromises.copyFile(logoTemplatePath, logoBuildPath);
+      console.log(`[PDF] Logo copied to ${logoBuildPath}`);
+    } catch (err) {
+      // Logo is optional; only warn if not found
+      if (err.code !== 'ENOENT') {
+        console.warn(`[PDF] Could not copy logo: ${err.message}`);
+      }
+    }
+
+    // --- Copy avatar (profile picture) ---
+    const avatarUrl = cardData.images?.avatar || null;
+    let avatarFileName = null;
+
+    if (avatarUrl) {
+      avatarFileName = `avatar_${uniqueId}.png`;
+      const avatarCopied = await copyAvatarToBuild(buildDir, avatarUrl, avatarFileName);
+      if (!avatarCopied) {
+        // If copy fails, we still leave the placeholder; the \profile macro will draw a red square
+        avatarFileName = null;
+      }
+    }
+
     // Generate filled card_content.tex inside build dir
     const contentTemplatePath = path.join(__dirname, 'latex_templates', 'card_content.tex');
     let cardContent = await fsPromises.readFile(contentTemplatePath, 'utf8');
@@ -1861,6 +1888,16 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     }
     // Ensure it uses the correct QR filename (already 'qr_image.png')
     cardContent = cardContent.replace(/{{qrImage}}/g, 'qr_image.png');
+
+    // Replace profile image placeholder – if we have an avatar, use its unique filename
+    // otherwise keep the default "profile.png" (which will be missing -> red square)
+    if (avatarFileName) {
+      cardContent = cardContent.replace(/{{profileImage}}/g, avatarFileName);
+    } else {
+      // Optionally set to a missing file (the macro will handle it)
+      cardContent = cardContent.replace(/{{profileImage}}/g, 'missing_profile.png');
+    }
+
     const cardContentPath = path.join(buildDir, 'card_content.tex');
     await fsPromises.writeFile(cardContentPath, cardContent);
 
@@ -4904,4 +4941,134 @@ function escapeLatex(str) {
   return str.replace(/[\\&%$#_{}~^]/g, '\\$&')
       .replace(/\n/g, ' ')
       .replace(/\r/g, '');
+}
+
+/**
+ * Copy avatar image from its URL (local uploads or demo) to the build directory.
+ * @param {string} buildDir - Temporary build directory.
+ * @param {string} avatarUrl - e.g., '/uploads/abc.jpg' or '/demo/avatar-1.jpg'
+ * @param {string} targetFilename - e.g., 'profile.png'
+ * @returns {Promise<boolean>} true if copied, false otherwise
+ */
+async function copyAvatarToBuild(buildDir, avatarUrl, targetFilename) {
+  if (!avatarUrl) return false;
+
+  let sourcePath = null;
+  // Handle /uploads/…
+  if (avatarUrl.startsWith('/uploads/')) {
+    const filename = path.basename(avatarUrl);
+    sourcePath = path.resolve(UPLOADS_DIR, filename);
+  }
+  // Handle /demo/… (demo avatars)
+  else if (avatarUrl.startsWith('/demo/')) {
+    const filename = path.basename(avatarUrl);
+    sourcePath = path.resolve(__dirname, 'public', 'demo', filename);
+  } else {
+    // External URLs are not supported (security)
+    return false;
+  }
+
+  if (!sourcePath) return false;
+
+  try {
+    // Security: ensure resolved path is inside allowed directory
+    const resolvedUploads = path.resolve(UPLOADS_DIR);
+    const resolvedDemo = path.resolve(__dirname, 'public', 'demo');
+    if (!sourcePath.startsWith(resolvedUploads) && !sourcePath.startsWith(resolvedDemo)) {
+      return false;
+    }
+
+    await fsPromises.access(sourcePath); // check existence
+    const destPath = path.join(buildDir, targetFilename);
+    await fsPromises.copyFile(sourcePath, destPath);
+    return true;
+  } catch (err) {
+    console.warn(`[PDF] Could not copy avatar: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Format phone number for better readability on business cards
+ * @param {string} phone - Raw phone number
+ * @returns {string} Formatted phone number
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return '';
+
+  // Remove all non-digit characters except '+'
+  const cleaned = phone.replace(/[^\d+]/g, '');
+
+  // Matches +49 followed by area code (3-5 digits) and subscriber number (rest)
+  const germanMatch = cleaned.match(/^\+49(\d{2,4})(\d+)$/);
+  if (germanMatch) {
+    const areaCode = germanMatch[1];
+    const subscriber = germanMatch[2];
+
+    // Format subscriber number: split into groups (e.g., 94063 -> 940-63)
+    if (subscriber.length >= 4) {
+      const lastTwo = subscriber.slice(-2);
+      const firstPart = subscriber.slice(0, -2);
+      return `+49 ${areaCode} ${firstPart}-${lastTwo}`;
+    } else {
+      return `+49 ${areaCode} ${subscriber}`;
+    }
+  }
+
+  // International format: +1 234 567 8901 (US)
+  const intlMatch = cleaned.match(/^\+(\d{1,3})(\d{3})(\d{3})(\d+)$/);
+  if (intlMatch) {
+    const country = intlMatch[1];
+    const area = intlMatch[2];
+    const exchange = intlMatch[3];
+    const subscriber = intlMatch[4];
+    return `+${country} ${area} ${exchange} ${subscriber}`;
+  }
+
+  // UK format: +44 20 7946 0958
+  const ukMatch = cleaned.match(/^\+44(\d{2})(\d{4})(\d{4})$/);
+  if (ukMatch) {
+    const area = ukMatch[1];
+    const first = ukMatch[2];
+    const second = ukMatch[3];
+    return `+44 ${area} ${first} ${second}`;
+  }
+
+  // Austrian format: +43 664 1234567
+  const austrianMatch = cleaned.match(/^\+43(\d{3})(\d+)$/);
+  if (austrianMatch) {
+    const prefix = austrianMatch[1];
+    const number = austrianMatch[2];
+    return `+43 ${prefix} ${number}`;
+  }
+
+  // Swiss format: +41 79 123 45 67
+  const swissMatch = cleaned.match(/^\+41(\d{2})(\d{3})(\d{2})(\d{2})$/);
+  if (swissMatch) {
+    const prefix = swissMatch[1];
+    const first = swissMatch[2];
+    const second = swissMatch[3];
+    const third = swissMatch[4];
+    return `+41 ${prefix} ${first} ${second} ${third}`;
+  }
+
+  // If no specific format matches, return with spaces every 3-4 digits
+  if (cleaned.startsWith('+')) {
+    const countryMatch = cleaned.match(/^(\+\d+)(.+)$/);
+    if (countryMatch) {
+      const countryCode = countryMatch[1];
+      const rest = countryMatch[2];
+      const spacedRest = rest.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+      return `${countryCode} ${spacedRest}`;
+    }
+  }
+
+  // Simple spacing for local numbers
+  if (cleaned.length >= 8) {
+    const groups = cleaned.match(/.{1,4}/g);
+    return groups.join(' ');
+  }
+
+  // Fallback: return original
+  return phone;
 }
