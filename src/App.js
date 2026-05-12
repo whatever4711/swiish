@@ -204,6 +204,7 @@ const getDefaultTemplate = (settings) => ({
     prefix: "",
     suffix: "",
     title: "Role Title",
+    titleSecond: "",
     company: settings?.default_organisation || "My Organisation",
     bio: "Welcome to the team.",
     location: "London, UK"
@@ -221,6 +222,18 @@ const getDefaultTemplate = (settings) => ({
     requireInteraction: true,  // ON by default
     clientSideObfuscation: false,  // OFF by default
     blockRobots: false  // OFF by default
+  },
+  company: {
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    instagram: '',
+    whatsapp: '',
+    facebook: '',
+    linkedin: '',
+    xing: ''
   }
 });
 
@@ -3034,10 +3047,11 @@ function CardDisplay({ data, settings, darkMode, toggleDarkMode, showAlert }) {
           {(() => {
             const color = settings?.theme_colors?.find(c => c.name === theme.color);
             const title = sanitizeText(personal.title || '');
+            const titleSecond = sanitizeText(personal.titleSecond || '');
             if (color?.textStyle) {
-              return <div className="text-lg font-medium" style={{ color: color.textStyle }}>{title}</div>;
+              return <div className="text-lg font-medium" style={{ color: color.textStyle }}>{titleSecond}<br/>{title}</div>;
             }
-            return <div className="text-lg font-medium" style={{ color: getTextColor(theme.color, settings) }}>{title}</div>;
+            return <div className="text-lg font-medium" style={{ color: getTextColor(theme.color, settings) }}>{titleSecond}<br/>{title}</div>;
           })()}
           <div className="flex items-center text-text-muted dark:text-text-muted-dark text-sm gap-2"><Briefcase className="w-4 h-4" /><span>{sanitizeText(personal.company || '')}</span></div>
           {personal.location && <div className="flex items-center text-text-muted-subtle dark:text-text-muted-dark text-sm gap-2 mt-1"><MapPin className="w-4 h-4" /><span>{sanitizeText(personal.location)}</span></div>}
@@ -3454,8 +3468,8 @@ function EditorView({ data, setData, onBack, onSave, slug, settings, csrfToken, 
                   <Input label="First Name" value={data.personal.firstName} onChange={v => handleInputChange('personal', 'firstName', v)} />
                   <Input label="Middle Name" value={data.personal.middleName} onChange={v => handleInputChange('personal', 'middleName', v)} />
                   <Input label="Last Name" value={data.personal.lastName} onChange={v => handleInputChange('personal', 'lastName', v)} />
-
                   <Input label="Job Title" value={data.personal.title} onChange={v => handleInputChange('personal', 'title', v)} />
+                  <Input label="Job Title (German)" value={data.personal.titleSecond} onChange={v => handleInputChange('personal', 'titleSecond', v)} />
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-text-primary dark:text-text-secondary-dark">Organisation</label>
                     <div className="relative">

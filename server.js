@@ -891,11 +891,13 @@ async function generatePreviewImage(cardData, themeColor) {
     const fullName = `${prefix}${first} ${middle}${last}${suffix}`.trim();
 
     const title = cardData.personal?.title || '';
+    const titleSecond = cardData.personal?.titleSecond || '';
     const avatarUrl = cardData.images?.avatar || '';
 
     // Escape content for safe XML inclusion
     const escapedName = escapeXml(fullName);
     const escapedTitle = escapeXml(title);
+    const escapedTitleSecond = escapeXml(titleSecond);
     const escapedCompany = escapeXml(cardData.personal?.company || '');
     const colorHex = getThemeColorHex(themeColor);
 
@@ -926,6 +928,11 @@ async function generatePreviewImage(cardData, themeColor) {
         <!-- Title -->
         <text x="500" y="330" font-family="Atkinson Hyperlegible" font-size="28" fill="#6b7280">
           ${escapedTitle}
+        </text>
+        
+        <!-- Title -->
+        <text x="500" y="330" font-family="Atkinson Hyperlegible" font-size="28" fill="#6b7280">
+          ${escapedTitleSecond}
         </text>
 
         <!-- Accent line (same x positioning as text) -->
@@ -1352,6 +1359,7 @@ const cardDataValidation = [
   body('personal.prefix').optional().isString().isLength({ max: 50 }),
   body('personal.suffix').optional().isString().isLength({ max: 50 }),
   body('personal.title').optional().trim().isLength({ max: 200 }).withMessage('Title too long'),
+  body('personal.titleSecond').optional().trim().isLength({ max: 200 }).withMessage('Second job title too long'),
   body('personal.company').optional().trim().isLength({ max: 200 }).withMessage('Company name too long'),
   body('personal.bio').optional().trim().isLength({ max: 1000 }).withMessage('Bio too long'),
   body('personal.location').optional().trim().isLength({ max: 200 }).withMessage('Location too long'),
@@ -1394,6 +1402,7 @@ const cardDataValidation = [
   }),
   body('links').optional().isArray().withMessage('Links must be an array'),
   body('links.*.title').optional().trim().isLength({ max: 200 }).withMessage('Link title too long'),
+  body('links.*.titleSecond').optional().trim().isLength({ max: 200 }).withMessage('Link titleSecond too long'),
   body('links.*.url').optional().trim().custom((value) => {
     if (value && !validator.isURL(value, { protocols: ['http', 'https'] })) {
       throw new Error('Invalid link URL');
@@ -1489,6 +1498,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
               orgSlug: orgSlugValue || null,
               name: '',
               title: '',
+              titleSecond: '',
               avatar: null,
               email: ''
             };
@@ -1504,6 +1514,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
                 const last = (parsed.personal?.lastName || '').trim();
                 result.name = `${prefix}${first} ${middle}${last}${suffix}`.trim();
                 result.title = parsed.personal?.title || '';
+                result.titleSecond = parsed.personal?.titleSecond || '';
                 result.avatar = parsed.images?.avatar || null;
                 result.email = (parsed.contact?.email || '').toLowerCase();
               } catch (e) {
@@ -1593,6 +1604,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
           orgSlug: orgSlug || null,
           name: '',
           title: '',
+          titleSecond: '',
           avatar: null,
           email: ''
         };
@@ -1608,6 +1620,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
             const last = (parsed.personal?.lastName || '').trim();
             result.name = `${prefix}${first} ${middle}${last}${suffix}`.trim();
             result.title = parsed.personal?.title || '';
+            result.titleSecond = parsed.personal?.titleSecond || '';
             result.avatar = parsed.images?.avatar || null;
             result.email = (parsed.contact?.email || '').toLowerCase();
           } catch (e) {
@@ -1638,6 +1651,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
           orgSlug: row.org_slug || null,
           name: fullname,
           title: parsed.personal?.title || '',
+          titleSecond: parsed.personal?.titleSecond || '',
           avatar: parsed.images?.avatar || null,
           email: (parsed.contact?.email || '').toLowerCase()
         };
@@ -1659,6 +1673,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
           orgSlug: row.org_slug || null,
           name: 'Invalid data',
           title: '',
+          titleSecond: '',
           avatar: null,
           email: ''
         };
@@ -1791,9 +1806,10 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       prefix: cardData.personal?.prefix || '',
       suffix: cardData.personal?.suffix || '',
       title: cardData.personal?.title || '',
+      titleSecond: cardData.personal?.titleSecond || '',
       company: cardData.personal?.company || '',
       email: cardData.contact?.email || '',
-      phone: cardData.contact?.phone || '',
+      phone: formatPhoneNumber(cardData.contact?.phone || ''),  // uses updated format
       website: cardData.contact?.website || '',
       bio: cardData.personal?.bio || ''
     };
@@ -1808,6 +1824,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       const replacements = {
         '{{fullName}}': escapeLatex(fullName),
         '{{title}}': escapeLatex(pdfData.title || ''),
+        '{{titleSecond}}': escapeLatex(pdfData.titleSecond || ''),
         '{{email}}': escapeLatex(pdfData.email || ''),
         '{{phone}}': escapeLatex(pdfData.phone || ''),
         '{{website}}': escapeLatex(pdfData.website || ''),
@@ -1843,6 +1860,33 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     const qrBuildPath = path.join(buildDir, 'qr_image.png');
     await fsPromises.copyFile(qrTempPath, qrBuildPath);
 
+    // --- Copy logo.png if it exists in the templates folder ---
+    const logoTemplatePath = path.join(__dirname, 'latex_templates', 'logo.png');
+    try {
+      await fsPromises.access(logoTemplatePath);
+      const logoBuildPath = path.join(buildDir, 'logo.png');
+      await fsPromises.copyFile(logoTemplatePath, logoBuildPath);
+      console.log(`[PDF] Logo copied to ${logoBuildPath}`);
+    } catch (err) {
+      // Logo is optional; only warn if not found
+      if (err.code !== 'ENOENT') {
+        console.warn(`[PDF] Could not copy logo: ${err.message}`);
+      }
+    }
+
+    // --- Copy avatar (profile picture) ---
+    const avatarUrl = cardData.images?.avatar || null;
+    let avatarFileName = null;
+
+    if (avatarUrl) {
+      avatarFileName = `avatar_${uniqueId}.png`;
+      const avatarCopied = await copyAvatarToBuild(buildDir, avatarUrl, avatarFileName);
+      if (!avatarCopied) {
+        // If copy fails, we still leave the placeholder; the \profile macro will draw a red square
+        avatarFileName = null;
+      }
+    }
+
     // Generate filled card_content.tex inside build dir
     const contentTemplatePath = path.join(__dirname, 'latex_templates', 'card_content.tex');
     let cardContent = await fsPromises.readFile(contentTemplatePath, 'utf8');
@@ -1851,6 +1895,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     const replacements = {
       '{{fullName}}': escapeLatex(fullName),
       '{{title}}': escapeLatex(pdfData.title || ''),
+      '{{titleSecond}}': escapeLatex(pdfData.titleSecond || ''),
       '{{email}}': escapeLatex(pdfData.email || ''),
       '{{phone}}': escapeLatex(pdfData.phone || ''),
       '{{website}}': escapeLatex(pdfData.website || ''),
@@ -1861,6 +1906,16 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     }
     // Ensure it uses the correct QR filename (already 'qr_image.png')
     cardContent = cardContent.replace(/{{qrImage}}/g, 'qr_image.png');
+
+    // Replace profile image placeholder – if we have an avatar, use its unique filename
+    // otherwise keep the default "profile.png" (which will be missing -> red square)
+    if (avatarFileName) {
+      cardContent = cardContent.replace(/{{profileImage}}/g, avatarFileName);
+    } else {
+      // Optionally set to a missing file (the macro will handle it)
+      cardContent = cardContent.replace(/{{profileImage}}/g, 'missing_profile.png');
+    }
+
     const cardContentPath = path.join(buildDir, 'card_content.tex');
     await fsPromises.writeFile(cardContentPath, cardContent);
 
@@ -2160,6 +2215,7 @@ app.post('/api/cards/:slug', requireAuth, apiLimiter, csrfProtection, [
       prefix: (req.body.personal?.prefix || '').trim().substring(0, 50),   // NEW
       suffix: (req.body.personal?.suffix || '').trim().substring(0, 50),   // NEW
       title: (req.body.personal?.title || '').trim().substring(0, 200),
+      titleSecond: (req.body.personal?.titleSecond || '').trim().substring(0, 200),
       company: (req.body.personal?.company || '').trim().substring(0, 200),
       bio: (req.body.personal?.bio || '').trim().substring(0, 1000),
       location: (req.body.personal?.location || '').trim().substring(0, 200)
@@ -2183,6 +2239,7 @@ app.post('/api/cards/:slug', requireAuth, apiLimiter, csrfProtection, [
     links: (req.body.links || []).map(link => ({
       id: link.id || Date.now(),
       title: (link.title || '').trim().substring(0, 200),
+      titleSecond: (link.titleSecond || '').trim().substring(0, 200),
       url: (link.url || '').trim(),
       icon: link.icon || 'link'
     })).filter(link => link.url && validator.isURL(link.url, { protocols: ['http', 'https'] })),
@@ -4156,6 +4213,7 @@ async function injectMetaTags(html, cardIdentifier, displayIdentifier) {
     const last = (cardData.personal?.lastName || '').trim();
     const fullName = `${prefix}${first} ${middle}${last}${suffix}`.trim();
     const title = escapeXml(cardData.personal?.title || '');
+    const titleSecond = escapeXml(cardData.personal?.titleSecond || '');
     const company = escapeXml(cardData.personal?.company || '');
     //const fullName = `${firstName} ${lastName}`.trim();
     const description = title ? `${title} at ${company}` : company || 'Digital Business Card';
@@ -4775,6 +4833,7 @@ function buildVCardString(cardData) {
     prefix = '',
     suffix = '',
     title = '',
+    titleSecond = '',
     company = '',
     email = '',
     phone = '',
@@ -4793,7 +4852,7 @@ function buildVCardString(cardData) {
   if (fullName) vcard += `FN:${fullName}\n`;
   vcard += `N:${lastName};${firstName};${middleName};${prefix};${suffix}\n`;
   if (company) vcard += `ORG:${company}\n`;
-  if (title) vcard += `TITLE:${title}\n`;
+  if (title) vcard += `TITLE:${titleSecond} / ${title}\n`;
   if (phone) vcard += `TEL;TYPE=CELL:${phone}\n`;
   if (email) vcard += `EMAIL;TYPE=WORK:${email}\n`;
   if (website) vcard += `URL:${website}\n`;
@@ -4820,6 +4879,7 @@ function fillLaTeXTemplate(cardData) {
   const replacements = {
     '{{fullName}}': escapeLatex(fullName ),
     '{{title}}': escapeLatex(cardData.title || ''),
+    '{{titleSecond}}': escapeLatex(cardData.titleSecond || ''),
     '{{email}}': escapeLatex(cardData.email || ''),
     '{{phone}}': escapeLatex(cardData.phone || ''),
     '{{website}}': escapeLatex(cardData.website || ''),
@@ -4867,6 +4927,7 @@ async function generateFilledCardContent(buildDir, pdfData, qrFileName) {
   const replacements = {
     '{{fullName}}': escapeLatex(fullName),
     '{{title}}': escapeLatex(pdfData.title || ''),
+    '{{titleSecond}}': escapeLatex(pdfData.titleSecond || ''),
     '{{email}}': escapeLatex(pdfData.email || ''),
     '{{phone}}': escapeLatex(pdfData.phone || ''),
     '{{website}}': escapeLatex(pdfData.website || ''),
@@ -4904,4 +4965,134 @@ function escapeLatex(str) {
   return str.replace(/[\\&%$#_{}~^]/g, '\\$&')
       .replace(/\n/g, ' ')
       .replace(/\r/g, '');
+}
+
+/**
+ * Copy avatar image from its URL (local uploads or demo) to the build directory.
+ * @param {string} buildDir - Temporary build directory.
+ * @param {string} avatarUrl - e.g., '/uploads/abc.jpg' or '/demo/avatar-1.jpg'
+ * @param {string} targetFilename - e.g., 'profile.png'
+ * @returns {Promise<boolean>} true if copied, false otherwise
+ */
+async function copyAvatarToBuild(buildDir, avatarUrl, targetFilename) {
+  if (!avatarUrl) return false;
+
+  let sourcePath = null;
+  // Handle /uploads/…
+  if (avatarUrl.startsWith('/uploads/')) {
+    const filename = path.basename(avatarUrl);
+    sourcePath = path.resolve(UPLOADS_DIR, filename);
+  }
+  // Handle /demo/… (demo avatars)
+  else if (avatarUrl.startsWith('/demo/')) {
+    const filename = path.basename(avatarUrl);
+    sourcePath = path.resolve(__dirname, 'public', 'demo', filename);
+  } else {
+    // External URLs are not supported (security)
+    return false;
+  }
+
+  if (!sourcePath) return false;
+
+  try {
+    // Security: ensure resolved path is inside allowed directory
+    const resolvedUploads = path.resolve(UPLOADS_DIR);
+    const resolvedDemo = path.resolve(__dirname, 'public', 'demo');
+    if (!sourcePath.startsWith(resolvedUploads) && !sourcePath.startsWith(resolvedDemo)) {
+      return false;
+    }
+
+    await fsPromises.access(sourcePath); // check existence
+    const destPath = path.join(buildDir, targetFilename);
+    await fsPromises.copyFile(sourcePath, destPath);
+    return true;
+  } catch (err) {
+    console.warn(`[PDF] Could not copy avatar: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Format phone number for better readability on business cards
+ * @param {string} phone - Raw phone number
+ * @returns {string} Formatted phone number
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return '';
+
+  // Remove all non-digit characters except '+'
+  const cleaned = phone.replace(/[^\d+]/g, '');
+
+  // Matches +49 followed by area code (3-5 digits) and subscriber number (rest)
+  const germanMatch = cleaned.match(/^\+49(\d{2,4})(\d+)$/);
+  if (germanMatch) {
+    const areaCode = germanMatch[1];
+    const subscriber = germanMatch[2];
+
+    // Format subscriber number: split into groups (e.g., 94063 -> 940-63)
+    if (subscriber.length >= 4) {
+      const lastTwo = subscriber.slice(-2);
+      const firstPart = subscriber.slice(0, -2);
+      return `+49 ${areaCode} ${firstPart}-${lastTwo}`;
+    } else {
+      return `+49 ${areaCode} ${subscriber}`;
+    }
+  }
+
+  // International format: +1 234 567 8901 (US)
+  const intlMatch = cleaned.match(/^\+(\d{1,3})(\d{3})(\d{3})(\d+)$/);
+  if (intlMatch) {
+    const country = intlMatch[1];
+    const area = intlMatch[2];
+    const exchange = intlMatch[3];
+    const subscriber = intlMatch[4];
+    return `+${country} ${area} ${exchange} ${subscriber}`;
+  }
+
+  // UK format: +44 20 7946 0958
+  const ukMatch = cleaned.match(/^\+44(\d{2})(\d{4})(\d{4})$/);
+  if (ukMatch) {
+    const area = ukMatch[1];
+    const first = ukMatch[2];
+    const second = ukMatch[3];
+    return `+44 ${area} ${first} ${second}`;
+  }
+
+  // Austrian format: +43 664 1234567
+  const austrianMatch = cleaned.match(/^\+43(\d{3})(\d+)$/);
+  if (austrianMatch) {
+    const prefix = austrianMatch[1];
+    const number = austrianMatch[2];
+    return `+43 ${prefix} ${number}`;
+  }
+
+  // Swiss format: +41 79 123 45 67
+  const swissMatch = cleaned.match(/^\+41(\d{2})(\d{3})(\d{2})(\d{2})$/);
+  if (swissMatch) {
+    const prefix = swissMatch[1];
+    const first = swissMatch[2];
+    const second = swissMatch[3];
+    const third = swissMatch[4];
+    return `+41 ${prefix} ${first} ${second} ${third}`;
+  }
+
+  // If no specific format matches, return with spaces every 3-4 digits
+  if (cleaned.startsWith('+')) {
+    const countryMatch = cleaned.match(/^(\+\d+)(.+)$/);
+    if (countryMatch) {
+      const countryCode = countryMatch[1];
+      const rest = countryMatch[2];
+      const spacedRest = rest.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+      return `${countryCode} ${spacedRest}`;
+    }
+  }
+
+  // Simple spacing for local numbers
+  if (cleaned.length >= 8) {
+    const groups = cleaned.match(/.{1,4}/g);
+    return groups.join(' ');
+  }
+
+  // Fallback: return original
+  return phone;
 }

@@ -1,17 +1,130 @@
+%% card_content.tex – TikZ business card (85x55 mm)
+\def\fullName{{{fullName}}}
+\def\jobtitle{{{title}}}
+\def\jobtitleSecond{{{titleSecond}}}
+\def\email{{{email}}}
+\def\phone{{{phone}}}
+\def\website{{{website}}}
+\def\company{{{company}}}
+\def\qrImage{{{qrImage}}}
+\def\profileImage{{{profileImage}}}
+%
+%\providecommand{\fullName}{Jon doe}
+%\providecommand{\jobtitle}{job description}
+%\providecommand{\email}{name@email.com}
+%\providecommand{\phone}{+00 000 000 0000}
+%\providecommand{\website}{Webpage}
+%\providecommand{\company}{Company}
+%\providecommand{\qrImage}{qr-placeholder.png}
+%\providecommand{\profileImage}{profile.png}
 
-\begin{minipage}{0.7\textwidth}
-  \begin{center}
-    \Large \textbf{ {{fullName}} } \\[2mm]
-    \normalsize {{title}} \\[2mm]
-    \begin{tabular}{c}
-      \faEnvelope ~ {{email}} \\
-      \faPhone ~ {{phone}} \\
-      \faGlobe ~ {{website}}
-    \end{tabular} \\[2mm]
-    \footnotesize {{company}}
-  \end{center}
-\end{minipage}
-\hfill
-\begin{minipage}{1.8cm}
-  \includegraphics[width=1.8cm,height=1.8cm]{{{qrImage}}}
-\end{minipage}
+%
+\providecommand{\logoImage}{logo.png}
+%
+%
+\definecolor{teal}{HTML}{009ba4}
+\definecolor{tealdark}{HTML}{00393f}     % deutlich dunkler
+%\definecolor{tealdark}{HTML}{006d75}   % dunklerer Teal für Verlauf
+\definecolor{magenta}{HTML}{df3f8f}
+\definecolor{magentalight}{HTML}{fab0d3} % deutlich heller & weicher
+%\definecolor{magentalight}{HTML}{f06da8}   % heller für Verlauf
+
+%
+\newcommand{\safeImage}[2][10mm]{%
+  \IfFileExists{#2}{%
+    \includegraphics[width=#1]{#2}%
+  }{%
+    \begin{tikzpicture}[baseline=(current bounding box.center)]
+      \draw[red, very thick] (0,0) rectangle (#1, #1);
+      \draw[red, very thick] (0,0) -- (#1, #1);
+      \draw[red, very thick] (#1,0) -- (0,#1);
+    \end{tikzpicture}%
+  }%
+}%
+%
+% Circular profile picture macro
+\newcommand{\profile}[1][23mm]{%
+  \IfFileExists{\profileImage}{%
+    \begin{tikzpicture}
+      \clip (0,0) circle[radius=#1/2];
+      \node[inner sep=0pt, outer sep=0pt, anchor=center] at (0,0) {\includegraphics[width=#1]{\profileImage}};
+    \end{tikzpicture}%
+  }{%
+    \begin{tikzpicture}
+      \draw[teal!30, thick] (0,0) circle[radius=#1/2];
+      \node[text=teal!50, font=\small] at (0,0) {Foto};
+    \end{tikzpicture}%
+  }%
+}
+%
+\begin{tikzpicture}[x=1mm, y=1mm]
+  %
+  \path[use as bounding box] (0,0) rectangle (85,54);
+
+  \fill[white, draw=black, thick, drop shadow={shadow xshift=0mm, shadow yshift=0mm}] (0,0) rectangle (85,54);
+    % Hintergrund
+  \fill[white] (0,0) rectangle (85,54);
+  % Linker farbiger Akzentstreifen
+  %\fill[teal] (0,0) rectangle (6,54);   % Linker farbiger Block
+  % === Farbverlauf linker Streifen ===
+  \shade[left color=teal, right color=magenta,
+         shading=axis, shading angle=0]
+        (0,0) rectangle (5.5,54);
+
+    \node[anchor=north, rotate=90, text=white, font=\sffamily\bfseries\scriptsize] at (.75,27) {\company};
+
+% GRID
+  % \draw[step=1,gray!20,thin] (0,0) grid (85,54);
+  % \draw[step=5,black!70,thin] (0,0) grid (85,54);
+  % % --- added axis numbers for easier placement ---
+  % % x-axis labels (every 5 mm) placed below the grid
+  % \foreach \x in {0,5,...,85} {
+  %   \node[anchor=north, font=\tiny, inner sep=1pt] at (\x, -1.5) {\x};
+  % }
+  % % y-axis labels (every 5 mm) placed left of the grid
+  % \foreach \y in {0,5,...,54} {
+  %   \node[anchor=east, font=\tiny, inner sep=1pt] at (-2.5, \y) {\y};
+  % }
+  % ------------------------------------------------
+
+
+  % Profilbild
+  \node[anchor=center] at (18,42) {\profile[20mm]};
+
+  % Magenta Akzentlinie unter dem Namen
+  %\draw[magenta, line width=1mm] (32,42) -- (82,42);
+
+  % ==================== Magenta Farbverlauf Linie ====================
+  \shade[left color=magenta, right color=teal,
+         shading=axis, shading angle=90]
+        (32,41.5) rectangle (82,42);
+
+  % Persönliche Daten
+  \node[anchor=south, text=darkgray, font=\large\bfseries] at (56,42) {\fullName};
+  \node[anchor=north, text=teal, font=\footnotesize] at (56,41.5) {\jobtitleSecond};
+  \node[anchor=north, text=teal, font=\footnotesize] at (56,38) {\jobtitle};
+
+  % Trennlinie
+  %\draw[teal!20, line width=0.6mm] (37,29) -- (82,29);
+
+  % Kontaktinformationen
+  \node[anchor=south west, align=left, text=darkgray, font=\tiny] at (10,5) {%
+    {\faPhone} \ \phone\\[2.5mm]
+    {\faEnvelope} \ \email\\[2.5mm]
+    {\faGlobe} \ \website
+  };
+
+  % ==================== QR-Code mit Teal Hintergrund ====================
+  \begin{scope}
+    \node[anchor=south east] at (82,4) {
+      \begin{tikzpicture}
+        % Teal Hintergrund (leicht abgerundet)
+        \fill[teal, rounded corners=2mm] (-1.1,-1.1) rectangle (20.1,20.1);
+        % Weißer Innenbereich für besseren Kontrast
+        \fill[white, rounded corners=1.5mm] (-.6,-.6) rectangle (19.6,19.6);
+        % QR-Code
+        \node at (20.2,-1.2) {\includegraphics[width=19mm]{\qrImage}};
+      \end{tikzpicture}
+    };
+  \end{scope}
+\end{tikzpicture}
