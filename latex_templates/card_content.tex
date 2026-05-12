@@ -1,6 +1,7 @@
 %% card_content.tex – TikZ business card (85x55 mm)
 \def\fullName{{{fullName}}}
 \def\jobtitle{{{title}}}
+\def\jobtitleSecond{{{titleSecond}}}
 \def\email{{{email}}}
 \def\phone{{{phone}}}
 \def\website{{{website}}}
@@ -100,7 +101,8 @@
 
   % Persönliche Daten
   \node[anchor=south, text=darkgray, font=\large\bfseries] at (56,42) {\fullName};
-  \node[anchor=north, text=teal, font=\footnotesize] at (56,41.5) {\jobtitle};
+  \node[anchor=north, text=teal, font=\footnotesize] at (56,41.5) {\jobtitleSecond};
+  \node[anchor=north, text=teal, font=\footnotesize] at (56,38) {\jobtitle};
 
   % Trennlinie
   %\draw[teal!20, line width=0.6mm] (37,29) -- (82,29);

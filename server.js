@@ -891,11 +891,13 @@ async function generatePreviewImage(cardData, themeColor) {
     const fullName = `${prefix}${first} ${middle}${last}${suffix}`.trim();
 
     const title = cardData.personal?.title || '';
+    const titleSecond = cardData.personal?.titleSecond || '';
     const avatarUrl = cardData.images?.avatar || '';
 
     // Escape content for safe XML inclusion
     const escapedName = escapeXml(fullName);
     const escapedTitle = escapeXml(title);
+    const escapedTitleSecond = escapeXml(titleSecond);
     const escapedCompany = escapeXml(cardData.personal?.company || '');
     const colorHex = getThemeColorHex(themeColor);
 
@@ -926,6 +928,11 @@ async function generatePreviewImage(cardData, themeColor) {
         <!-- Title -->
         <text x="500" y="330" font-family="Atkinson Hyperlegible" font-size="28" fill="#6b7280">
           ${escapedTitle}
+        </text>
+        
+        <!-- Title -->
+        <text x="500" y="330" font-family="Atkinson Hyperlegible" font-size="28" fill="#6b7280">
+          ${escapedTitleSecond}
         </text>
 
         <!-- Accent line (same x positioning as text) -->
@@ -1352,6 +1359,7 @@ const cardDataValidation = [
   body('personal.prefix').optional().isString().isLength({ max: 50 }),
   body('personal.suffix').optional().isString().isLength({ max: 50 }),
   body('personal.title').optional().trim().isLength({ max: 200 }).withMessage('Title too long'),
+  body('personal.titleSecond').optional().trim().isLength({ max: 200 }).withMessage('Second job title too long'),
   body('personal.company').optional().trim().isLength({ max: 200 }).withMessage('Company name too long'),
   body('personal.bio').optional().trim().isLength({ max: 1000 }).withMessage('Bio too long'),
   body('personal.location').optional().trim().isLength({ max: 200 }).withMessage('Location too long'),
@@ -1394,6 +1402,7 @@ const cardDataValidation = [
   }),
   body('links').optional().isArray().withMessage('Links must be an array'),
   body('links.*.title').optional().trim().isLength({ max: 200 }).withMessage('Link title too long'),
+  body('links.*.titleSecond').optional().trim().isLength({ max: 200 }).withMessage('Link titleSecond too long'),
   body('links.*.url').optional().trim().custom((value) => {
     if (value && !validator.isURL(value, { protocols: ['http', 'https'] })) {
       throw new Error('Invalid link URL');
@@ -1489,6 +1498,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
               orgSlug: orgSlugValue || null,
               name: '',
               title: '',
+              titleSecond: '',
               avatar: null,
               email: ''
             };
@@ -1504,6 +1514,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
                 const last = (parsed.personal?.lastName || '').trim();
                 result.name = `${prefix}${first} ${middle}${last}${suffix}`.trim();
                 result.title = parsed.personal?.title || '';
+                result.titleSecond = parsed.personal?.titleSecond || '';
                 result.avatar = parsed.images?.avatar || null;
                 result.email = (parsed.contact?.email || '').toLowerCase();
               } catch (e) {
@@ -1593,6 +1604,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
           orgSlug: orgSlug || null,
           name: '',
           title: '',
+          titleSecond: '',
           avatar: null,
           email: ''
         };
@@ -1608,6 +1620,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
             const last = (parsed.personal?.lastName || '').trim();
             result.name = `${prefix}${first} ${middle}${last}${suffix}`.trim();
             result.title = parsed.personal?.title || '';
+            result.titleSecond = parsed.personal?.titleSecond || '';
             result.avatar = parsed.images?.avatar || null;
             result.email = (parsed.contact?.email || '').toLowerCase();
           } catch (e) {
@@ -1638,6 +1651,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
           orgSlug: row.org_slug || null,
           name: fullname,
           title: parsed.personal?.title || '',
+          titleSecond: parsed.personal?.titleSecond || '',
           avatar: parsed.images?.avatar || null,
           email: (parsed.contact?.email || '').toLowerCase()
         };
@@ -1659,6 +1673,7 @@ app.get('/api/admin/cards', requireAuth, apiLimiter, (req, res, next) => {
           orgSlug: row.org_slug || null,
           name: 'Invalid data',
           title: '',
+          titleSecond: '',
           avatar: null,
           email: ''
         };
@@ -1791,6 +1806,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       prefix: cardData.personal?.prefix || '',
       suffix: cardData.personal?.suffix || '',
       title: cardData.personal?.title || '',
+      titleSecond: cardData.personal?.titleSecond || '',
       company: cardData.personal?.company || '',
       email: cardData.contact?.email || '',
       phone: formatPhoneNumber(cardData.contact?.phone || ''),  // uses updated format
@@ -1808,6 +1824,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
       const replacements = {
         '{{fullName}}': escapeLatex(fullName),
         '{{title}}': escapeLatex(pdfData.title || ''),
+        '{{titleSecond}}': escapeLatex(pdfData.titleSecond || ''),
         '{{email}}': escapeLatex(pdfData.email || ''),
         '{{phone}}': escapeLatex(pdfData.phone || ''),
         '{{website}}': escapeLatex(pdfData.website || ''),
@@ -1878,6 +1895,7 @@ app.post('/api/cards/:shortCode/export-pdf', async (req, res) => {
     const replacements = {
       '{{fullName}}': escapeLatex(fullName),
       '{{title}}': escapeLatex(pdfData.title || ''),
+      '{{titleSecond}}': escapeLatex(pdfData.titleSecond || ''),
       '{{email}}': escapeLatex(pdfData.email || ''),
       '{{phone}}': escapeLatex(pdfData.phone || ''),
       '{{website}}': escapeLatex(pdfData.website || ''),
@@ -2197,6 +2215,7 @@ app.post('/api/cards/:slug', requireAuth, apiLimiter, csrfProtection, [
       prefix: (req.body.personal?.prefix || '').trim().substring(0, 50),   // NEW
       suffix: (req.body.personal?.suffix || '').trim().substring(0, 50),   // NEW
       title: (req.body.personal?.title || '').trim().substring(0, 200),
+      titleSecond: (req.body.personal?.titleSecond || '').trim().substring(0, 200),
       company: (req.body.personal?.company || '').trim().substring(0, 200),
       bio: (req.body.personal?.bio || '').trim().substring(0, 1000),
       location: (req.body.personal?.location || '').trim().substring(0, 200)
@@ -2220,6 +2239,7 @@ app.post('/api/cards/:slug', requireAuth, apiLimiter, csrfProtection, [
     links: (req.body.links || []).map(link => ({
       id: link.id || Date.now(),
       title: (link.title || '').trim().substring(0, 200),
+      titleSecond: (link.titleSecond || '').trim().substring(0, 200),
       url: (link.url || '').trim(),
       icon: link.icon || 'link'
     })).filter(link => link.url && validator.isURL(link.url, { protocols: ['http', 'https'] })),
@@ -4193,6 +4213,7 @@ async function injectMetaTags(html, cardIdentifier, displayIdentifier) {
     const last = (cardData.personal?.lastName || '').trim();
     const fullName = `${prefix}${first} ${middle}${last}${suffix}`.trim();
     const title = escapeXml(cardData.personal?.title || '');
+    const titleSecond = escapeXml(cardData.personal?.titleSecond || '');
     const company = escapeXml(cardData.personal?.company || '');
     //const fullName = `${firstName} ${lastName}`.trim();
     const description = title ? `${title} at ${company}` : company || 'Digital Business Card';
@@ -4812,6 +4833,7 @@ function buildVCardString(cardData) {
     prefix = '',
     suffix = '',
     title = '',
+    titleSecond = '',
     company = '',
     email = '',
     phone = '',
@@ -4830,7 +4852,7 @@ function buildVCardString(cardData) {
   if (fullName) vcard += `FN:${fullName}\n`;
   vcard += `N:${lastName};${firstName};${middleName};${prefix};${suffix}\n`;
   if (company) vcard += `ORG:${company}\n`;
-  if (title) vcard += `TITLE:${title}\n`;
+  if (title) vcard += `TITLE:${titleSecond} / ${title}\n`;
   if (phone) vcard += `TEL;TYPE=CELL:${phone}\n`;
   if (email) vcard += `EMAIL;TYPE=WORK:${email}\n`;
   if (website) vcard += `URL:${website}\n`;
@@ -4857,6 +4879,7 @@ function fillLaTeXTemplate(cardData) {
   const replacements = {
     '{{fullName}}': escapeLatex(fullName ),
     '{{title}}': escapeLatex(cardData.title || ''),
+    '{{titleSecond}}': escapeLatex(cardData.titleSecond || ''),
     '{{email}}': escapeLatex(cardData.email || ''),
     '{{phone}}': escapeLatex(cardData.phone || ''),
     '{{website}}': escapeLatex(cardData.website || ''),
@@ -4904,6 +4927,7 @@ async function generateFilledCardContent(buildDir, pdfData, qrFileName) {
   const replacements = {
     '{{fullName}}': escapeLatex(fullName),
     '{{title}}': escapeLatex(pdfData.title || ''),
+    '{{titleSecond}}': escapeLatex(pdfData.titleSecond || ''),
     '{{email}}': escapeLatex(pdfData.email || ''),
     '{{phone}}': escapeLatex(pdfData.phone || ''),
     '{{website}}': escapeLatex(pdfData.website || ''),
