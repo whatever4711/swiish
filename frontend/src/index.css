@@ -1,0 +1,431 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Basic page defaults */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+body {
+  background-color: var(--color-main-light);
+  color: var(--color-text-primary-light);
+  position: relative;
+  min-height: 100%;
+  z-index: 0;
+  isolation: isolate; /* create stacking context so ::after can sit behind content */
+}
+
+.dark body {
+  background-color: var(--color-main-dark);
+  color: var(--color-text-primary-dark);
+}
+
+/* Apply texture only to body (main background) */
+/* Texture overlays the main background color but sits behind cards and other content */
+body::after {
+  content: none; /* disabled; texture is applied on main containers */
+}
+
+.dark body::after {
+  content: none;
+}
+
+/* Ensure page content paints above the texture layer */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Main background texture utility */
+.bg-main-texture {
+  position: relative;
+  isolation: isolate;
+}
+
+.bg-main-texture::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--texture-main-light);
+  background-size: var(--texture-main-size, 540px 540px);
+  background-repeat: repeat;
+  opacity: var(--texture-main-opacity-light, 0.08);
+  mix-blend-mode: var(--texture-main-blend-light, multiply);
+  z-index: 0;
+}
+
+.dark .bg-main-texture::after {
+  background-image: var(--texture-main-dark);
+  background-size: var(--texture-main-size, 540px 540px);
+  opacity: var(--texture-main-opacity-dark, 0.1);
+  mix-blend-mode: var(--texture-main-blend-dark, overlay);
+}
+
+/* Ensure cards, surfaces, and other content sit above the texture */
+.bg-card,
+.bg-card-dark,
+.bg-surface,
+.bg-surface-dark,
+[class*="bg-card"],
+[class*="bg-surface"] {
+  position: relative;
+  z-index: 1;
+}
+
+/* Override Tailwind color classes to use CSS variables from theme files */
+/* This allows themes to be switched at runtime */
+
+/* Background colors */
+.bg-main { background-color: var(--color-main-light) !important; }
+.dark .bg-main-dark,
+.dark .bg-main { background-color: var(--color-main-dark) !important; }
+
+.bg-card { background-color: var(--color-card-light) !important; }
+.dark .bg-card-dark,
+.dark .bg-card { background-color: var(--color-card-dark) !important; }
+
+.bg-surface { background-color: var(--color-surface-light) !important; }
+.dark .bg-surface-dark,
+.dark .bg-surface { background-color: var(--color-surface-dark) !important; }
+
+.bg-action { background-color: var(--color-action-light) !important; }
+.dark .bg-action-dark,
+.dark .bg-action { background-color: var(--color-action-dark) !important; }
+
+.bg-action:hover,
+.hover\:bg-action-hover:hover { background-color: var(--color-action-hover-light) !important; }
+.dark .bg-action-dark:hover,
+.dark .bg-action:hover,
+.dark .hover\:bg-action-hover-dark:hover,
+.dark .hover\:bg-action-hover:hover { background-color: var(--color-action-hover-dark) !important; }
+
+.bg-action-hover { background-color: var(--color-action-hover-light) !important; }
+.dark .bg-action-hover-dark,
+.dark .bg-action-hover { background-color: var(--color-action-hover-dark) !important; }
+
+.bg-confirm { background-color: var(--color-confirm-light) !important; }
+.dark .bg-confirm-dark,
+.dark .bg-confirm { background-color: var(--color-confirm-dark) !important; }
+
+.bg-confirm:hover,
+.hover\:bg-confirm-hover:hover { background-color: var(--color-confirm-hover-light) !important; }
+.dark .bg-confirm-dark:hover,
+.dark .bg-confirm:hover,
+.dark .hover\:bg-confirm-hover-dark:hover,
+.dark .hover\:bg-confirm-hover:hover { background-color: var(--color-confirm-hover-dark) !important; }
+
+.bg-confirm-hover { background-color: var(--color-confirm-hover-light) !important; }
+.dark .bg-confirm-hover-dark,
+.dark .bg-confirm-hover { background-color: var(--color-confirm-hover-dark) !important; }
+
+.bg-input-bg { background-color: var(--color-input-bg-light) !important; }
+.dark .bg-input-bg-dark,
+.dark .bg-input-bg { background-color: var(--color-input-bg-dark) !important; }
+
+.bg-success { background-color: var(--color-success-light) !important; }
+.dark .bg-success-dark,
+.dark .bg-success { background-color: var(--color-success-dark) !important; }
+
+.bg-error { background-color: var(--color-error-light) !important; }
+.dark .bg-error-dark,
+.dark .bg-error { background-color: var(--color-error-dark) !important; }
+
+.bg-info { background-color: var(--color-info-light) !important; }
+.dark .bg-info-dark,
+.dark .bg-info { background-color: var(--color-info-dark) !important; }
+
+.bg-link { background-color: var(--color-link-bg-light) !important; }
+.dark .bg-link-dark,
+.dark .bg-link { background-color: var(--color-link-bg-dark) !important; }
+
+/* Text colors */
+.text-text-primary { color: var(--color-text-primary-light) !important; }
+.dark .text-text-primary-dark,
+.dark .text-text-primary { color: var(--color-text-primary-dark) !important; }
+
+.text-text-secondary { color: var(--color-text-secondary-light) !important; }
+.dark .text-text-secondary-dark,
+.dark .text-text-secondary { color: var(--color-text-secondary-dark) !important; }
+
+.text-text-muted { color: var(--color-text-muted-light) !important; }
+.dark .text-text-muted-dark,
+.dark .text-text-muted { color: var(--color-text-muted-dark) !important; }
+
+.text-text-muted-subtle { color: var(--color-text-muted-subtle-light) !important; }
+.dark .text-text-muted-subtle-dark,
+.dark .text-text-muted-subtle { color: var(--color-text-muted-subtle-dark) !important; }
+
+.text-action { color: var(--color-action-light) !important; }
+.dark .text-action-dark,
+.dark .text-action { color: var(--color-action-dark) !important; }
+
+.text-confirm-text { color: var(--color-confirm-text-light) !important; }
+.dark .text-confirm-text-dark,
+.dark .text-confirm-text { color: var(--color-confirm-text-dark) !important; }
+
+.text-input-text { color: var(--color-input-text-light) !important; }
+.dark .text-input-text-dark,
+.dark .text-input-text { color: var(--color-input-text-dark) !important; }
+
+.text-link { color: var(--color-link-light) !important; }
+.dark .text-link-dark,
+.dark .text-link { color: var(--color-link-dark) !important; }
+
+.text-success { color: var(--color-success-text-light) !important; }
+.dark .text-success-dark,
+.dark .text-success { color: var(--color-success-text-dark) !important; }
+
+.text-error { color: var(--color-error-text-light) !important; }
+.dark .text-error-dark,
+.dark .text-error { color: var(--color-error-text-dark) !important; }
+
+.text-info { color: var(--color-info-text-light) !important; }
+.dark .text-info-dark,
+.dark .text-info { color: var(--color-info-text-dark) !important; }
+
+/* Border colors */
+.border-border { border-color: var(--color-border-light) !important; }
+.dark .border-border-dark,
+.dark .border-border { border-color: var(--color-border-dark) !important; }
+
+.border-border-subtle { border-color: var(--color-border-subtle-light) !important; }
+.dark .border-border-subtle-dark,
+.dark .border-border-subtle { border-color: var(--color-border-subtle-dark) !important; }
+
+.border-input-border { border-color: var(--color-input-border-light) !important; }
+.dark .border-input-border-dark,
+.dark .border-input-border { border-color: var(--color-input-border-dark) !important; }
+
+.border-action { border-color: var(--color-action-light) !important; }
+.dark .border-action-dark,
+.dark .border-action { border-color: var(--color-action-dark) !important; }
+
+.border-confirm-border { border-color: var(--color-confirm-border-light) !important; }
+.dark .border-confirm-border-dark,
+.dark .border-confirm-border { border-color: var(--color-confirm-border-dark) !important; }
+
+.border-success-border { border-color: var(--color-success-border-light) !important; }
+.dark .border-success-border-dark,
+.dark .border-success-border { border-color: var(--color-success-border-dark) !important; }
+
+.hover\:border-success-border:hover { border-color: var(--color-success-light) !important; }
+.dark .hover\:border-success-border-dark:hover,
+.dark .hover\:border-success-border:hover { border-color: var(--color-success-dark) !important; }
+
+.border-error-border { border-color: var(--color-error-border-light) !important; }
+.dark .border-error-border-dark,
+.dark .border-error-border { border-color: var(--color-error-border-dark) !important; }
+
+.hover\:border-error-border:hover { border-color: var(--color-error-light) !important; }
+.dark .hover\:border-error-border-dark:hover,
+.dark .hover\:border-error-border:hover { border-color: var(--color-error-dark) !important; }
+
+.border-info-border { border-color: var(--color-info-border-light) !important; }
+.dark .border-info-border-dark,
+.dark .border-info-border { border-color: var(--color-info-border-dark) !important; }
+
+.border-link-border { border-color: var(--color-link-border-light) !important; }
+.dark .border-link-border-dark,
+.dark .border-link-border { border-color: var(--color-link-border-dark) !important; }
+
+/* Minimal theme: border-only buttons */
+.theme-minimal .bg-action,
+.theme-minimal .bg-action-dark,
+.theme-minimal .bg-confirm,
+.theme-minimal .bg-confirm-dark {
+  background-color: transparent !important;
+  color: var(--color-action-light) !important;
+  border: 1px solid var(--color-action-light) !important;
+}
+.theme-minimal .dark .bg-action,
+.theme-minimal .dark .bg-action-dark,
+.theme-minimal .dark .bg-confirm,
+.theme-minimal .dark .bg-confirm-dark {
+  background-color: transparent !important;
+  color: var(--color-action-dark) !important;
+  border: 1px solid var(--color-action-dark) !important;
+}
+
+.theme-minimal .bg-action:hover,
+.theme-minimal .bg-action-hover:hover,
+.theme-minimal .bg-confirm:hover,
+.theme-minimal .bg-confirm-hover:hover {
+  background-color: var(--color-action-hover-light) !important;
+  color: var(--color-action-light) !important;
+  border-color: var(--color-action-light) !important;
+}
+.theme-minimal .dark .bg-action:hover,
+.theme-minimal .dark .bg-action-hover:hover,
+.theme-minimal .dark .bg-confirm:hover,
+.theme-minimal .dark .bg-confirm-hover:hover {
+  background-color: var(--color-action-hover-dark) !important;
+  color: var(--color-action-dark) !important;
+  border-color: var(--color-action-dark) !important;
+}
+
+.theme-minimal .text-confirm-text,
+.theme-minimal .text-confirm-text-dark {
+  color: inherit !important;
+}
+
+/* Background textures - applied via pseudo-elements */
+/* Uses CSS custom properties set from theme - if empty, no texture is applied */
+/* Note: Main background texture is applied to body element, not individual containers */
+
+.bg-surface-textured {
+  position: relative;
+}
+
+.bg-surface-textured::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--texture-surface-light);
+  background-size: cover;
+  background-repeat: repeat;
+  opacity: 0.15;
+  mix-blend-mode: overlay;
+}
+
+.dark .bg-surface-textured::after {
+  background-image: var(--texture-surface-dark);
+  opacity: 0.1;
+}
+
+.bg-card-textured {
+  position: relative;
+}
+
+.bg-card-textured::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--texture-card-light);
+  background-size: cover;
+  background-repeat: repeat;
+  opacity: 0.15;
+  mix-blend-mode: overlay;
+}
+
+.dark .bg-card-textured::after {
+  background-image: var(--texture-card-dark);
+  opacity: 0.1;
+}
+
+/* Phone input styling to match existing inputs */
+.PhoneInput {
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  border-radius: 0.5rem;
+  border-color: var(--color-input-border-light);
+  background-color: var(--color-input-bg-light);
+  color: var(--color-input-text-light);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.dark .PhoneInput {
+  border-color: var(--color-input-border-dark);
+  background-color: var(--color-input-bg-dark);
+  color: var(--color-input-text-dark);
+}
+
+.PhoneInput:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring-light);
+  border-color: var(--color-action-light);
+}
+
+.dark .PhoneInput:focus-within {
+  box-shadow: 0 0 0 2px var(--color-focus-ring-dark);
+  border-color: var(--color-action-dark);
+}
+
+/* Style the country selector dropdown */
+.PhoneInputCountry {
+  margin-right: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.PhoneInputCountrySelect {
+  background-color: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.875rem;
+  padding: 0.25rem;
+  cursor: pointer;
+  appearance: none;
+}
+
+.PhoneInputCountryIcon {
+  width: 1.5rem;
+  height: 1.5rem;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+}
+
+.PhoneInputInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  color: inherit;
+  font-size: 1rem;
+  padding: 0;
+  flex: 1;
+}
+
+.PhoneInputInput::placeholder {
+  color: var(--color-text-muted-light);
+}
+
+.dark .PhoneInputInput::placeholder {
+  color: var(--color-text-muted-dark);
+}
+
+/* Dark mode country selector */
+.dark .PhoneInputCountrySelect {
+  background-color: var(--color-surface-dark);
+  color: var(--color-text-primary-dark);
+}
+
+.dark .PhoneInputCountry {
+  background-color: var(--color-surface-dark);
+}
+
+.dark .PhoneInputCountryIcon {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.dark .PhoneInputCountrySelect option {
+  background-color: var(--color-card-dark);
+  color: var(--color-text-primary-dark);
+}
+
+/* Swiish logo styling - text-secondary color at 25% opacity by default, snap to original colors on hover (no animation) */
+.swiish-logo {
+  opacity: 0.25;
+  /* Convert to text-secondary color (slate-600 #475569) - dark grayish blue */
+  filter: brightness(0) saturate(100%) invert(28%) sepia(9%) saturate(1000%) hue-rotate(180deg) brightness(0.9) contrast(0.85);
+}
+
+.dark .swiish-logo {
+  /* Convert to text-secondary-dark color (stone-300 #d6d3d1) - lighter warm gray */
+  filter: brightness(0) saturate(100%) invert(84%) sepia(2%) saturate(200%) hue-rotate(314deg) brightness(1.1) contrast(0.9);
+}
+
+.group:hover .swiish-logo {
+  opacity: 1;
+  filter: none; /* Revert to original colors */
+}
+

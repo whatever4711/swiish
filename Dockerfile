@@ -11,7 +11,7 @@ COPY postcss.config.js ./
 COPY scripts/ scripts/
 RUN npm install
 
-COPY public/ public/
+COPY backend/public/ public/
 COPY src/ src/
 COPY .git/ .git/
 

@@ -1,84 +1,23 @@
 {
   "name": "swiish",
   "version": "0.7.0-dev",
-  "description": "Open-source digital business card platform with QR codes and PWA support",
+  "description": "Open‑source digital business card platform",
   "private": false,
   "repository": {
     "type": "git",
     "url": "https://github.com/MrCrin/swiish.git"
   },
   "license": "AGPL-3.0",
-  "keywords": [
-    "business-card",
-    "digital-card",
-    "qr-code",
-    "pwa",
-    "self-hosted"
-  ],
-  "author": "Michael Crinnion",
-  "homepage": "/",
-  "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "ajv-keywords": "^5.1.0",
-    "bcrypt": "^5.1.1",
-    "cookie-parser": "^1.4.6",
-    "cors": "^2.8.5",
-    "country-flag-icons": "^1.5.7",
-    "csurf": "^1.11.0",
-    "db-migrate": "^0.11.14",
-    "db-migrate-sqlite3": "^1.0.2",
-    "dompurify": "^3.3.1",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
-    "express-validator": "^7.0.1",
-    "file-type": "^19.0.0",
-    "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "lucide-react": "^0.263.1",
-    "multer": "^2.0.1",
-    "node-latex": "^3.1.0",
-    "nodemailer": "^7.0.11",
-    "qrcode": "^1.5.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-phone-number-input": "^3.4.14",
-    "react-router-dom": "^6.20.0",
-    "sharp": "^0.34.5",
-    "sqlite3": "^5.1.6",
-    "validator": "^13.11.0"
-  },
   "scripts": {
-    "capture-git-info": "node scripts/capture-git-info.js",
-    "prestart": "npm run capture-git-info",
-    "start": "react-scripts start",
-    "prebuild": "npm run capture-git-info",
-    "build": "react-scripts build",
-    "serve": "node server.js",
-    "migrate": "db-migrate up",
-    "watch:build": "nodemon --watch src --ext js,jsx,css --exec \"npm run build\" --ignore build",
-    "watch:server": "nodemon --watch server.js --exec \"node server.js\" --ignore build --ignore src",
-    "dev": "concurrently \"npm run watch:build\" \"npm run watch:server\" --names \"BUILD,SERVER\" --prefix-colors \"cyan,yellow\""
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm run serve",
+    "migrate": "cd backend && npm run migrate",
+    "postinstall": "cd backend && npm install && cd ../frontend && npm install"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.20",
-    "concurrently": "^8.2.2",
-    "nodemon": "^3.1.11",
-    "postcss": "^8.4.47",
-    "react-scripts": "5.0.1",
-    "tailwindcss": "^3.4.10"
+    "concurrently": "^8.2.2"
   }
 }
